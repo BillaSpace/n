@@ -6,7 +6,7 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 from youtube_search import YoutubeSearch
 import requests
-from BADMUSIC import app
+from AnonXMusic import app
 
 # Define a dictionary to track the last message timestamp for each user
 user_last_message_time = {}
@@ -60,7 +60,7 @@ async def download_song(_, message: Message):
         # Search for the song
         results = YoutubeSearch(query, max_results=1).to_dict()
         if not results:
-            await m.edit("**⚠️ No results found. Please make sure you typed the correct song name.**")
+            await m.edit("**No results found. Please make sure you typed the correct song name.**")
             return
 
         link = f"https://youtube.com{results[0]['url_suffix']}"
@@ -76,7 +76,7 @@ async def download_song(_, message: Message):
         channel_name = results[0]["channel"]
 
         # Now, download the audio using yt_dlp
-        await m.edit("📥 **Downloading...**")
+        await m.edit("📥")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(link, download=False)
             audio_file = ydl.prepare_filename(info_dict)
@@ -91,8 +91,8 @@ async def download_song(_, message: Message):
             audio_file,
             thumb=thumb_name,
             title=title,
-            caption=f"{title}\nRequested by ➪ {message.from_user.mention}\nViews ➪ {views}\nChannel ➪ {channel_name}",
-            duration=dur
+            duration=dur, 
+            caption=f"{title}\nRequested by ➪ {message.from_user.mention}\nViews ➪ {views}\nJoin ➪ [𝐃ᴇᴀᴅʟɪɴᴇ ꭙ 𝐓ᴇᴄʜ](https://t.me/DeadlineTech)"
         )
 
         # Cleanup downloaded files
