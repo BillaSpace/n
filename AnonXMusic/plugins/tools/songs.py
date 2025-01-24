@@ -92,7 +92,7 @@ async def download_song(_, message: Message):
             thumb=thumb_name,
             title=title,
             duration=dur, 
-            caption=f"{title}\nRequested by ➪ {message.from_user.mention}\nViews ➪ {views}\nJoin ➪ [𝐃ᴇᴀᴅʟɪɴᴇ ꭙ 𝐓ᴇᴄʜ](https://t.me/DeadlineTech)"
+            caption=f"{title}\nRequested by ➪ {message.from_user.mention}\nViews ➪ {views}\nJoin ➪ @DeadlineTech"
         )
 
         # Cleanup downloaded files
