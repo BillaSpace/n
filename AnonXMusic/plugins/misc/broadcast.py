@@ -15,7 +15,6 @@ from pyrogram.enums import ChatMembersFilter
 from AnonXMusic.utils.formatters import alpha_to_int
 from config import adminlist
 
-
 IS_BROADCASTING = False
 
 
@@ -28,7 +27,7 @@ async def broadcast_message(client, message, _):
     
     IS_BROADCASTING = True
 
-    # Determine message content
+    # Get message content
     if message.reply_to_message:
         msg_id = message.reply_to_message.id
         chat_id = message.chat.id
@@ -41,91 +40,96 @@ async def broadcast_message(client, message, _):
         if not query:
             return await message.reply_text(_["broad_8"])
 
-    await message.reply_text("Broadcasting started...")
+    await message.reply_text("🚀 Broadcast started...")
 
     async def send_message(chat_list, is_user=False):
-        """Sends messages concurrently to a list of chat/user IDs"""
+        """Sends messages concurrently in batches for speed"""
         sent = 0
         pin = 0
-        tasks = []
+        semaphore = asyncio.Semaphore(20)  # Limits concurrent requests for better speed
 
         async def send_single_message(chat_id):
             nonlocal sent, pin
-            try:
-                if message.reply_to_message:
-                    m = await app.forward_messages(chat_id, chat_id, msg_id)
-                else:
-                    m = await app.send_message(chat_id, text=query)
-                sent += 1
+            async with semaphore:
+                try:
+                    if message.reply_to_message:
+                        m = await app.forward_messages(chat_id, chat_id, msg_id)
+                    else:
+                        m = await app.send_message(chat_id, text=query)
+                    sent += 1
 
-                if "-pin" in message.text:
-                    await m.pin(disable_notification=True)
-                    pin += 1
-                elif "-pinloud" in message.text:
-                    await m.pin(disable_notification=False)
-                    pin += 1
-            except FloodWait as fw:
-                if fw.value > 200:
-                    return
-                await asyncio.sleep(fw.value)
-            except Exception:
-                pass
+                    if "-pin" in message.text:
+                        await m.pin(disable_notification=True)
+                        pin += 1
+                    elif "-pinloud" in message.text:
+                        await m.pin(disable_notification=False)
+                        pin += 1
+                except FloodWait as fw:
+                    if fw.value > 10:  # Skip if FloodWait is too long
+                        return
+                    await asyncio.sleep(fw.value)
+                except Exception:
+                    pass
 
-        for chat_id in chat_list:
-            tasks.append(send_single_message(chat_id))
-
-        await asyncio.gather(*tasks)
+        await asyncio.gather(*(send_single_message(chat_id) for chat_id in chat_list))
         return sent, pin
 
-    # Broadcast to groups
+    # Fast Group Broadcast
     sent, pin = 0, 0
     if "-nobot" not in message.text:
         chats = [int(chat["chat_id"]) for chat in await get_served_chats()]
         sent, pin = await send_message(chats)
-        await message.reply_text(_["broad_3"].format(sent, pin))
+        await message.reply_text(f"✅ Sent to {sent} chats, pinned in {pin}.")
 
-    # Broadcast to users
+    # Fast User Broadcast
     if "-user" in message.text:
         users = [int(user["user_id"]) for user in await get_served_users()]
         user_sent, _ = await send_message(users, is_user=True)
-        await message.reply_text(_["broad_4"].format(user_sent))
+        await message.reply_text(f"✅ Sent to {user_sent} users.")
 
-    # Broadcast via assistants
+    # Optimized Assistant Broadcast
     if "-assistant" in message.text:
-        aw = await message.reply_text(_["broad_5"])
+        aw = await message.reply_text("⏳ Sending via assistants...")
         from AnonXMusic.core.userbot import assistants
 
         async def send_via_assistants():
+            semaphore = asyncio.Semaphore(5)  # Limit concurrent assistant requests
             tasks = []
-            for num in assistants:
-                client = await get_client(num)
 
-                async def send_for_client():
+            async def send_for_client(num):
+                async with semaphore:
+                    client = await get_client(num)
                     sent = 0
-                    async for dialog in client.get_dialogs():
-                        try:
-                            if message.reply_to_message:
-                                await client.forward_messages(dialog.chat.id, chat_id, msg_id)
-                            else:
-                                await client.send_message(dialog.chat.id, text=query)
-                            sent += 1
-                        except FloodWait as fw:
-                            if fw.value > 200:
-                                return
-                            await asyncio.sleep(fw.value)
-                        except:
-                            pass
+                    try:
+                        async for dialog in client.get_dialogs():
+                            try:
+                                if message.reply_to_message:
+                                    await client.forward_messages(dialog.chat.id, chat_id, msg_id)
+                                else:
+                                    await client.send_message(dialog.chat.id, text=query)
+                                sent += 1
+                            except FloodWait as fw:
+                                if fw.value > 10:
+                                    return
+                                await asyncio.sleep(fw.value)
+                            except:
+                                pass
+                    except:
+                        return
                     return f"Assistant {num}: {sent} messages sent\n"
 
-                tasks.append(send_for_client())
+            for num in assistants:
+                tasks.append(send_for_client(num))
 
             results = await asyncio.gather(*tasks)
             return "".join(filter(None, results))
 
         assist_msg = await send_via_assistants()
-        await aw.edit_text(_["broad_6"] + assist_msg)
+        await aw.edit_text(f"🤖 Assistant Broadcast Summary:\n{assist_msg}")
 
     IS_BROADCASTING = False
+    await message.reply_text("✅ **Broadcast Completed!** 🚀")
+
 
 async def auto_clean():
     while not await asyncio.sleep(10):
