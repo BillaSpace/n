@@ -15,19 +15,6 @@ from pyrogram.enums import ChatMembersFilter
 from AnonXMusic.utils.formatters import alpha_to_int
 from config import adminlist
 
-import asyncio
-from pyrogram import filters
-from pyrogram.errors import FloodWait
-
-from AnonXMusic import app
-from AnonXMusic.misc import SUDOERS
-from AnonXMusic.utils.database import (
-    get_served_chats,
-    get_served_users,
-    get_client,
-)
-from AnonXMusic.utils.decorators.language import language
-
 IS_BROADCASTING = False
 BROADCAST_LIMIT = 50  # Number of concurrent messages
 FLOOD_SLEEP_THRESHOLD = 200  # Ignore waits longer than this
