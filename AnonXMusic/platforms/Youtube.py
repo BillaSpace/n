@@ -12,16 +12,13 @@ from youtubesearchpython.__future__ import VideosSearch
 from AnonXMusic.utils.database import is_on_off
 from AnonXMusic.utils.formatters import time_to_seconds
 
-API_KEY = "7sY1l2jstLCOYA1s7qrKbv0e"
+API_KEY = "Rf1qda5gyCITj6VbrekzRxmR"
 
-import os
 import glob
 import random
 import logging
 
-
 import requests
-import os
 import time
 def extract_video_id(link: str) -> str:
     """
@@ -43,7 +40,7 @@ def extract_video_id(link: str) -> str:
 
     raise ValueError("Invalid YouTube link provided.")
 def api_dl(video_id: str) -> str:
-    api_url = f"http://139.59.115.28:8080/download/song/{video_id}?key={API_KEY}"
+    api_url = f"http://192.241.130.108:8080/download/song/{video_id}?key={API_KEY}"
     file_path = os.path.join("downloads", f"{video_id}.mp3")
 
     # Check if file already exists
