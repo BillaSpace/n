@@ -1,3 +1,4 @@
+pyrogram
 aiofiles
 aiohttp
 asyncio
