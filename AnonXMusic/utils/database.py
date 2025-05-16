@@ -479,6 +479,12 @@ async def get_served_chats() -> list:
         chats_list.append(chat["_id"])
     return chats_list
 
+async def add_served_chat(chat_id: int):
+    is_served = await is_served_chat(chat_id)
+    if is_served:
+        return
+    return await chatsdb.insert_one({"_id": chat_id})
+
 
 async def blacklisted_chats() -> list:
     chats_list = []
