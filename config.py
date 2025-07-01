@@ -19,10 +19,10 @@ MONGO_DB_URI = getenv("MONGO_DB_URI", None)
 DURATION_LIMIT_MIN = int(getenv("DURATION_LIMIT", 10000))
 
 # Chat id of a group for logging bot's activities
-LOGGER_ID = int(getenv("LOGGER_ID", None))
+LOGGER_ID = int(getenv("LOGGER_ID", -1002030443562))
 
 # Get this value from @FallenxBot on Telegram by /id
-OWNER_ID = int(getenv("OWNER_ID", 1356469075))
+OWNER_ID = int(getenv("OWNER_ID", 5960968099))
 
 ## Fill these variables if you're deploying on heroku.
 # Your heroku app name
@@ -32,15 +32,15 @@ HEROKU_API_KEY = getenv("HEROKU_API_KEY")
 
 UPSTREAM_REPO = getenv(
     "UPSTREAM_REPO",
-    "https://github.com/Smaugopp/Voidmusic",
+    "https://github.com/BillaSpace/n",
 )
 UPSTREAM_BRANCH = getenv("UPSTREAM_BRANCH", "master")
 GIT_TOKEN = getenv(
     "GIT_TOKEN", None
 )  # Fill this variable if your upstream repository is private
 
-SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "https://t.me/nothing_bots_updates")
-SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/nothing_bots_support")
+SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "https://t.me/BillaSpace")
+SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/BillaCore")
 
 # Set this to True if you want the assistant to automatically leave chats after an interval
 AUTO_LEAVING_ASSISTANT = bool(getenv("AUTO_LEAVING_ASSISTANT", False))
@@ -52,7 +52,7 @@ SPOTIFY_CLIENT_SECRET = getenv("SPOTIFY_CLIENT_SECRET", "2607415f99944cc6b24fa98
 
 
 # Maximum limit for fetching playlist's track from youtube, spotify, apple links.
-PLAYLIST_FETCH_LIMIT = int(getenv("PLAYLIST_FETCH_LIMIT", 50))
+PLAYLIST_FETCH_LIMIT = int(getenv("PLAYLIST_FETCH_LIMIT", 200))
 
 
 # Telegram audio and video file size limit (in bytes)
@@ -78,21 +78,21 @@ confirmer = {}
 
 
 START_IMG_URL = getenv(
-    "START_IMG_URL", "https://graph.org/file/97669c286e18c2eddc72d.jpg"
+    "START_IMG_URL", "https://graph.org/file/fb93a2cd43c367f62c01b-50e610807938aff356.jpg"
 )
 PING_IMG_URL = getenv(
-    "PING_IMG_URL", "https://graph.org/file/97669c286e18c2eddc72d.jpg"
+    "PING_IMG_URL", "https://graph.org/file/850b97892571970594dc0-b005845a1d9c0f175a.jpg"
 )
-PLAYLIST_IMG_URL = "https://graph.org/file/97669c286e18c2eddc72d.jpg"
-STATS_IMG_URL = "https://graph.org/file/97669c286e18c2eddc72d.jpg"
-TELEGRAM_AUDIO_URL = "https://graph.org/file/97669c286e18c2eddc72d.jpg"
-TELEGRAM_VIDEO_URL = "https://graph.org/file/97669c286e18c2eddc72d.jpg"
-STREAM_IMG_URL = "https://graph.org/file/97669c286e18c2eddc72d.jpg"
-SOUNCLOUD_IMG_URL = "https://graph.org/file/97669c286e18c2eddc72d.jpg"
-YOUTUBE_IMG_URL = "https://graph.org/file/97669c286e18c2eddc72d.jpg"
+PLAYLIST_IMG_URL = "https://graph.org/file/fcc7a21f981ec0f05b948-328342ccce11980e03.jpg"
+STATS_IMG_URL = "https://graph.org/file/715af77ffc6cf7fb5be56-d00e70b278d2859bcb.jpg"
+TELEGRAM_AUDIO_URL = "https://graph.org/file/f4e010d4a88b63d1f6258-dac28211d4296ff886.jpg"
+TELEGRAM_VIDEO_URL = "https://graph.org/file/0799b110240ef68c1519b-46d4e55cf4b3b1b908.jpg"
+STREAM_IMG_URL = "https://graph.org/file/4db38631d64b1574307e5-c1d195c7e36ecfbb6f.jpg"
+SOUNCLOUD_IMG_URL = "https://graph.org/file/06d7e3bc7657550efb357-f248fc40e11e128403.jpg"
+YOUTUBE_IMG_URL = "https://graph.org/file/580f7c0c0f15dc22a0ca6-2891d428a41e4dbd52.jpg"
 SPOTIFY_ARTIST_IMG_URL = "https://graph.org/file/97669c286e18c2eddc72d.jpg"
 SPOTIFY_ALBUM_IMG_URL = "https://graph.org/file/97669c286e18c2eddc72d.jpg"
-SPOTIFY_PLAYLIST_IMG_URL = "https://graph.org/file/97669c286e18c2eddc72d.jpg"
+SPOTIFY_PLAYLIST_IMG_URL = "https://graph.org/file/64fd441861e7ef2278458-c944c057c615001364.jpg"
 
 
 def time_to_seconds(time):
