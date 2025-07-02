@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from pyrogram import filters
 from pyrogram.enums import ChatMembersFilter
@@ -16,6 +17,9 @@ from AnonXMusic.utils.database import (
 from AnonXMusic.utils.decorators.language import language
 from AnonXMusic.utils.formatters import alpha_to_int
 from config import adminlist
+
+# Configure logging
+logging.basicConfig(filename='broadcast.log', level=logging.ERROR)
 
 IS_BROADCASTING = False
 
@@ -45,7 +49,8 @@ async def braodcast_message(client, message, _):
         if "-group" in message.text:
             # Broadcasting to chats
             sent_chats = 0
-            chats = [int(chat.chat_id) for chat in await get_served_chats()]  # Fixed: chat.chat_id
+            schats = await get_served_chats()
+            chats = [int(chat["chat_id"]) for chat in schats]  # Fixed: chat["chat_id"]
             for i in chats:
                 try:
                     if content_type == 'photo':
@@ -56,14 +61,16 @@ async def braodcast_message(client, message, _):
                     await asyncio.sleep(0.2)
                 except FloodWait as fw:
                     await asyncio.sleep(fw.x)
-                except:
+                except Exception as e:
+                    logging.error(f"Error broadcasting to chat {i}: {e}")
                     continue
             await message.reply_text(f"Broadcast to chats completed! Sent to {sent_chats} chats.")
 
         if "-user" in message.text:
             # Broadcasting to users
             sent_users = 0
-            users = [int(user.user_id) for user in await get_served_users()]  # Fixed: user.user_id
+            susers = await get_served_users()
+            users = [int(user["user_id"]) for user in susers]  # Fixed: user["user_id"]
             for i in users:
                 try:
                     if content_type == 'photo':
@@ -74,7 +81,8 @@ async def braodcast_message(client, message, _):
                     await asyncio.sleep(0.2)
                 except FloodWait as fw:
                     await asyncio.sleep(fw.x)
-                except:
+                except Exception as e:
+                    logging.error(f"Error broadcasting to user {i}: {e}")
                     continue
             await message.reply_text(f"Broadcast to users completed! Sent to {sent_users} users.")
 
@@ -112,7 +120,7 @@ async def braodcast_message(client, message, _):
         chats = []
         schats = await get_served_chats()
         for chat in schats:
-            chats.append(int(chat.chat_id))  # Fixed: chat.chat_id
+            chats.append(int(chat["chat_id"]))  # Fixed: chat["chat_id"]
         for i in chats:
             try:
                 m = (
@@ -139,7 +147,8 @@ async def braodcast_message(client, message, _):
                 if flood_time > 200:
                     continue
                 await asyncio.sleep(flood_time)
-            except:
+            except Exception as e:
+                logging.error(f"Error broadcasting to chat {i}: {e}")
                 continue
         try:
             await message.reply_text(_["broad_3"].format(sent, pin))
@@ -151,7 +160,7 @@ async def braodcast_message(client, message, _):
         served_users = []
         susers = await get_served_users()
         for user in susers:
-            served_users.append(int(user.user_id))  # Fixed: user.user_id
+            served_users.append(int(user["user_id"]))  # Fixed: user["user_id"]
         for i in served_users:
             try:
                 m = (
@@ -166,8 +175,9 @@ async def braodcast_message(client, message, _):
                 if flood_time > 200:
                     continue
                 await asyncio.sleep(flood_time)
-            except:
-                pass
+            except Exception as e:
+                logging.error(f"Error broadcasting to user {i}: {e}")
+                continue
         try:
             await message.reply_text(_["broad_4"].format(susr))
         except:
@@ -195,7 +205,8 @@ async def braodcast_message(client, message, _):
                     if flood_time > 200:
                         continue
                     await asyncio.sleep(flood_time)
-                except:
+                except Exception as e:
+                    logging.error(f"Error broadcasting via assistant {num} to chat {dialog.chat.id}: {e}")
                     continue
             text += _["broad_7"].format(num, sent)
         try:
@@ -220,7 +231,8 @@ async def auto_clean():
                     for user in authusers:
                         user_id = await alpha_to_int(user)
                         adminlist[chat_id].append(user_id)
-        except:
+        except Exception as e:
+            logging.error(f"Error in auto_clean for chat {chat_id}: {e}")
             continue
 
 asyncio.create_task(auto_clean())
