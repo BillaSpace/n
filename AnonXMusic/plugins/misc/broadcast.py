@@ -13,7 +13,7 @@ from AnonXMusic.utils.database import (
     get_served_chats,
     get_served_users,
 )
-from AviaxMusic.utils.decorators.language import language
+from AnonXMusic.utils.decorators.language import language
 from AnonXMusic.utils.formatters import alpha_to_int
 from config import adminlist
 
