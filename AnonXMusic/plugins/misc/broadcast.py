@@ -1,9 +1,8 @@
 import asyncio
 import logging
-
 from pyrogram import filters
 from pyrogram.enums import ChatMembersFilter
-from pyrogram.errors import FloodWait
+from pyrogram.errors import FloodWait, RPCError
 
 from AnonXMusic import app
 from AnonXMusic.misc import SUDOERS
@@ -19,7 +18,7 @@ from AnonXMusic.utils.formatters import alpha_to_int
 from config import adminlist
 
 # Configure logging
-logging.basicConfig(filename='broadcast.log', level=logging.DEBUG)  # Changed to DEBUG for more info
+logging.basicConfig(filename='broadcast.log', level=logging.DEBUG)
 
 IS_BROADCASTING = False
 
@@ -51,8 +50,16 @@ async def braodcast_message(client, message, _):
             sent_chats = 0
             chats = await get_served_chats()  # Returns list of integers
             logging.debug(f"get_served_chats returned: {chats}")
+            if not chats:
+                await message.reply_text("No served chats found in the database.")
+                IS_BROADCASTING = False
+                return
             for i in chats:
                 try:
+                    # Validate chat ID
+                    if not isinstance(i, int) or i >= 0:
+                        logging.warning(f"Invalid chat ID {i}, skipping.")
+                        continue
                     if content_type == 'photo':
                         await app.send_photo(chat_id=i, photo=file_id, caption=caption, reply_markup=reply_markup)
                     else:
@@ -60,8 +67,9 @@ async def braodcast_message(client, message, _):
                     sent_chats += 1
                     await asyncio.sleep(0.2)
                 except FloodWait as fw:
+                    logging.info(f"FloodWait for chat {i}: waiting {fw.x} seconds")
                     await asyncio.sleep(fw.x)
-                except Exception as e:
+                except RPCError as e:
                     logging.error(f"Error broadcasting to chat {i}: {e}")
                     continue
             await message.reply_text(f"Broadcast to chats completed! Sent to {sent_chats} chats.")
@@ -71,8 +79,16 @@ async def braodcast_message(client, message, _):
             sent_users = 0
             users = await get_served_users()  # Returns list of integers
             logging.debug(f"get_served_users returned: {users}")
+            if not users:
+                await message.reply_text("No served users found in the database.")
+                IS_BROADCASTING = False
+                return
             for i in users:
                 try:
+                    # Validate user ID
+                    if not isinstance(i, int) or i <= 0:
+                        logging.warning(f"Invalid user ID {i}, skipping.")
+                        continue
                     if content_type == 'photo':
                         await app.send_photo(chat_id=i, photo=file_id, caption=caption, reply_markup=reply_markup)
                     else:
@@ -80,8 +96,9 @@ async def braodcast_message(client, message, _):
                     sent_users += 1
                     await asyncio.sleep(0.2)
                 except FloodWait as fw:
+                    logging.info(f"FloodWait for user {i}: waiting {fw.x} seconds")
                     await asyncio.sleep(fw.x)
-                except Exception as e:
+                except RPCError as e:
                     logging.error(f"Error broadcasting to user {i}: {e}")
                     continue
             await message.reply_text(f"Broadcast to users completed! Sent to {sent_users} users.")
@@ -120,7 +137,14 @@ async def braodcast_message(client, message, _):
         chats = []
         schats = await get_served_chats()  # Returns list of integers
         logging.debug(f"get_served_chats (nobot) returned: {schats}")
+        if not schats:
+            await message.reply_text("No served chats found in the database.")
+            IS_BROADCASTING = False
+            return
         for chat in schats:
+            if not isinstance(chat, int) or chat >= 0:
+                logging.warning(f"Invalid chat ID {chat}, skipping.")
+                continue
             chats.append(int(chat))  # Convert Int64 to int
         for i in chats:
             try:
@@ -133,22 +157,22 @@ async def braodcast_message(client, message, _):
                     try:
                         await m.pin(disable_notification=True)
                         pin += 1
-                    except:
+                    except RPCError as e:
+                        logging.error(f"Error pinning in chat {i}: {e}")
                         continue
                 elif "-pinloud" in message.text:
                     try:
                         await m.pin(disable_notification=False)
                         pin += 1
-                    except:
+                    except RPCError as e:
+                        logging.error(f"Error pinning in chat {i}: {e}")
                         continue
                 sent += 1
                 await asyncio.sleep(0.2)
             except FloodWait as fw:
-                flood_time = int(fw.value)
-                if flood_time > 200:
-                    continue
-                await asyncio.sleep(flood_time)
-            except Exception as e:
+                logging.info(f"FloodWait for chat {i}: waiting {fw.value} seconds")
+                await asyncio.sleep(fw.value)
+            except RPCError as e:
                 logging.error(f"Error broadcasting to chat {i}: {e}")
                 continue
         try:
@@ -161,7 +185,14 @@ async def braodcast_message(client, message, _):
         served_users = []
         susers = await get_served_users()  # Returns list of integers
         logging.debug(f"get_served_users (nobot) returned: {susers}")
+        if not susers:
+            await message.reply_text("No served users found in the database.")
+            IS_BROADCASTING = False
+            return
         for user in susers:
+            if not isinstance(user, int) or user <= 0:
+                logging.warning(f"Invalid user ID {user}, skipping.")
+                continue
             served_users.append(int(user))  # Convert Int64 to int
         for i in served_users:
             try:
@@ -173,11 +204,9 @@ async def braodcast_message(client, message, _):
                 susr += 1
                 await asyncio.sleep(0.2)
             except FloodWait as fw:
-                flood_time = int(fw.value)
-                if flood_time > 200:
-                    continue
-                await asyncio.sleep(flood_time)
-            except Exception as e:
+                logging.info(f"FloodWait for user {i}: waiting {fw.value} seconds")
+                await asyncio.sleep(fw.value)
+            except RPCError as e:
                 logging.error(f"Error broadcasting to user {i}: {e}")
                 continue
         try:
@@ -203,11 +232,9 @@ async def braodcast_message(client, message, _):
                     sent += 1
                     await asyncio.sleep(3)
                 except FloodWait as fw:
-                    flood_time = int(fw.value)
-                    if flood_time > 200:
-                        continue
-                    await asyncio.sleep(flood_time)
-                except Exception as e:
+                    logging.info(f"FloodWait for assistant {num} in chat {dialog.chat.id}: waiting {fw.value} seconds")
+                    await asyncio.sleep(fw.value)
+                except RPCError as e:
                     logging.error(f"Error broadcasting via assistant {num} to chat {dialog.chat.id}: {e}")
                     continue
             text += _["broad_7"].format(num, sent)
