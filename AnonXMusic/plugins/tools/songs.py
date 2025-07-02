@@ -52,7 +52,7 @@ def parse_duration(duration: str) -> int:
 @app.on_message(filters.command(["song", "music"]))
 async def download_song(client: Client, message: Message):
     user_id = message.from_user.id
-    current_time = time()
+    current_time = time.time()  # Fixed: Changed from time() to time.time()
 
     # Spam protection
     last_message_time = user_last_message_time.get(user_id, 0)
@@ -151,7 +151,7 @@ async def download_song(client: Client, message: Message):
                 chat_id=LOGGER_ID,
                 audio=logger_file,
                 title=title,
-                performer=BillaSpace,
+                performer="BillaSpace",  # Fixed: Changed to string literal as it seems to be a placeholder
                 duration=dur,
                 caption=logger_caption,
                 thumb=thumb_path if thumb_path else None
