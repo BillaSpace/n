@@ -46,7 +46,7 @@ async def sg(client: Client, message: Message):
         if stalk.text is None:
             continue
         if not stalk:
-            await message.reply("botnya ngambek")
+            await message.reply("Are You Stalking")
         elif stalk:
             await message.reply(f"{stalk.text}")
             break
