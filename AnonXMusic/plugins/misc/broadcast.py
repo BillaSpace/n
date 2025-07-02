@@ -13,7 +13,7 @@ from AnonXMusic.utils.database import (
     get_served_chats,
     get_served_users,
 )
-from AnonXMusic.utils.decorators.language import language
+from AviaxMusic.utils.decorators.language import language
 from AnonXMusic.utils.formatters import alpha_to_int
 from config import adminlist
 
@@ -24,9 +24,70 @@ IS_BROADCASTING = False
 @language
 async def braodcast_message(client, message, _):
     global IS_BROADCASTING
+
+    if "-group" in message.text or "-user" in message.text:
+        if not message.reply_to_message or not (message.reply_to_message.photo or message.reply_to_message.text):
+            return await message.reply_text("Please reply to a text or image message for broadcasting.")
+
+        # Extract data from the replied message
+        if message.reply_to_message.photo:
+            content_type = 'photo'
+            file_id = message.reply_to_message.photo.file_id
+        else:
+            content_type = 'text'
+            text_content = message.reply_to_message.text
+
+        caption = message.reply_to_message.caption
+        reply_markup = message.reply_to_message.reply_markup if hasattr(message.reply_to_message, 'reply_markup') else None
+
+        IS_BROADCASTING = True
+        await message.reply_text(_["broad_1"])
+
+        if "-group" in message.text or "-user" in message.text:
+            # Broadcasting to chats
+            sent_chats = 0
+            chats = [int(chat["chat_id"]) for chat in await get_served_chats()]
+            for i in chats:
+                try:
+                    if content_type == 'photo':
+                        await app.send_photo(chat_id=i, photo=file_id, caption=caption, reply_markup=reply_markup)
+                    else:
+                        await app.send_message(chat_id=i, text=text_content, reply_markup=reply_markup)
+                    sent_chats += 1
+                    await asyncio.sleep(0.2)
+                except FloodWait as fw:
+                    await asyncio.sleep(fw.x)
+                except:
+                    continue
+            await message.reply_text(f"Broadcast to chats completed! Sent to {sent_chats} chats.")
+
+        if "-user" in message.text:
+            # Broadcasting to users
+            sent_users = 0
+            users = [int(user["user_id"]) for user in await get_served_users()]
+            for i in users:
+                try:
+                    if content_type == 'photo':
+                        await app.send_photo(chat_id=i, photo=file_id, caption=caption, reply_markup=reply_markup)
+                    else:
+                        await app.send_message(chat_id=i, text=text_content, reply_markup=reply_markup)
+                    sent_users += 1
+                    await asyncio.sleep(0.2)
+                except FloodWait as fw:
+                    await asyncio.sleep(fw.x)
+                except:
+                    continue
+            await message.reply_text(f"Broadcast to users completed! Sent to {sent_users} users.")
+
+        IS_BROADCASTING = False
+        return
+
+
     if message.reply_to_message:
         x = message.reply_to_message.id
         y = message.chat.id
+        reply_markup = message.reply_to_message.reply_markup if message.reply_to_message.reply_markup else None
+        content = None
     else:
         if len(message.command) < 2:
             return await message.reply_text(_["broad_2"])
@@ -57,7 +118,7 @@ async def braodcast_message(client, message, _):
         for i in chats:
             try:
                 m = (
-                    await app.forward_messages(i, y, x)
+                    await app.copy_message(chat_id=i, from_chat_id=y, message_id=x, reply_markup=reply_markup)
                     if message.reply_to_message
                     else await app.send_message(i, text=query)
                 )
@@ -96,7 +157,7 @@ async def braodcast_message(client, message, _):
         for i in served_users:
             try:
                 m = (
-                    await app.forward_messages(i, y, x)
+                    await app.copy_message(chat_id=i, from_chat_id=y, message_id=x, reply_markup=reply_markup)
                     if message.reply_to_message
                     else await app.send_message(i, text=query)
                 )
@@ -124,7 +185,7 @@ async def braodcast_message(client, message, _):
             client = await get_client(num)
             async for dialog in client.get_dialogs():
                 try:
-                    await client.copy_messages(
+                    await client.forward_messages(
                         dialog.chat.id, y, x
                     ) if message.reply_to_message else await client.send_message(
                         dialog.chat.id, text=query
