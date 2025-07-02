@@ -19,7 +19,7 @@ from AnonXMusic.utils.formatters import alpha_to_int
 from config import adminlist
 
 # Configure logging
-logging.basicConfig(filename='broadcast.log', level=logging.ERROR)
+logging.basicConfig(filename='broadcast.log', level=logging.DEBUG)  # Changed to DEBUG for more info
 
 IS_BROADCASTING = False
 
@@ -49,8 +49,8 @@ async def braodcast_message(client, message, _):
         if "-group" in message.text:
             # Broadcasting to chats
             sent_chats = 0
-            schats = await get_served_chats()
-            chats = [int(chat["chat_id"]) for chat in schats]  # Fixed: chat["chat_id"]
+            chats = await get_served_chats()  # Returns list of integers
+            logging.debug(f"get_served_chats returned: {chats}")
             for i in chats:
                 try:
                     if content_type == 'photo':
@@ -69,8 +69,8 @@ async def braodcast_message(client, message, _):
         if "-user" in message.text:
             # Broadcasting to users
             sent_users = 0
-            susers = await get_served_users()
-            users = [int(user["user_id"]) for user in susers]  # Fixed: user["user_id"]
+            users = await get_served_users()  # Returns list of integers
+            logging.debug(f"get_served_users returned: {users}")
             for i in users:
                 try:
                     if content_type == 'photo':
@@ -118,9 +118,10 @@ async def braodcast_message(client, message, _):
         sent = 0
         pin = 0
         chats = []
-        schats = await get_served_chats()
+        schats = await get_served_chats()  # Returns list of integers
+        logging.debug(f"get_served_chats (nobot) returned: {schats}")
         for chat in schats:
-            chats.append(int(chat["chat_id"]))  # Fixed: chat["chat_id"]
+            chats.append(int(chat))  # Convert Int64 to int
         for i in chats:
             try:
                 m = (
@@ -158,9 +159,10 @@ async def braodcast_message(client, message, _):
     if "-user" in message.text:
         susr = 0
         served_users = []
-        susers = await get_served_users()
+        susers = await get_served_users()  # Returns list of integers
+        logging.debug(f"get_served_users (nobot) returned: {susers}")
         for user in susers:
-            served_users.append(int(user["user_id"]))  # Fixed: user["user_id"]
+            served_users.append(int(user))  # Convert Int64 to int
         for i in served_users:
             try:
                 m = (
