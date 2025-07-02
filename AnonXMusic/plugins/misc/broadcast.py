@@ -19,7 +19,6 @@ from config import adminlist
 
 IS_BROADCASTING = False
 
-
 @app.on_message(filters.command("broadcast") & SUDOERS)
 @language
 async def braodcast_message(client, message, _):
@@ -43,10 +42,10 @@ async def braodcast_message(client, message, _):
         IS_BROADCASTING = True
         await message.reply_text(_["broad_1"])
 
-        if "-group" in message.text or "-user" in message.text:
+        if "-group" in message.text:
             # Broadcasting to chats
             sent_chats = 0
-            chats = [int(chat["chat_id"]) for chat in await get_served_chats()]
+            chats = [int(chat.chat_id) for chat in await get_served_chats()]  # Fixed: chat.chat_id
             for i in chats:
                 try:
                     if content_type == 'photo':
@@ -64,7 +63,7 @@ async def braodcast_message(client, message, _):
         if "-user" in message.text:
             # Broadcasting to users
             sent_users = 0
-            users = [int(user["user_id"]) for user in await get_served_users()]
+            users = [int(user.user_id) for user in await get_served_users()]  # Fixed: user.user_id
             for i in users:
                 try:
                     if content_type == 'photo':
@@ -81,7 +80,6 @@ async def braodcast_message(client, message, _):
 
         IS_BROADCASTING = False
         return
-
 
     if message.reply_to_message:
         x = message.reply_to_message.id
@@ -114,7 +112,7 @@ async def braodcast_message(client, message, _):
         chats = []
         schats = await get_served_chats()
         for chat in schats:
-            chats.append(int(chat["chat_id"]))
+            chats.append(int(chat.chat_id))  # Fixed: chat.chat_id
         for i in chats:
             try:
                 m = (
@@ -153,7 +151,7 @@ async def braodcast_message(client, message, _):
         served_users = []
         susers = await get_served_users()
         for user in susers:
-            served_users.append(int(user["user_id"]))
+            served_users.append(int(user.user_id))  # Fixed: user.user_id
         for i in served_users:
             try:
                 m = (
@@ -206,7 +204,6 @@ async def braodcast_message(client, message, _):
             pass
     IS_BROADCASTING = False
 
-
 async def auto_clean():
     while not await asyncio.sleep(10):
         try:
@@ -225,6 +222,5 @@ async def auto_clean():
                         adminlist[chat_id].append(user_id)
         except:
             continue
-
 
 asyncio.create_task(auto_clean())
