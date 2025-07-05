@@ -138,7 +138,7 @@ async def get_thumb(videoid):
         # Title box
         title_lines = para[:2]
         title_width = min(max([text_widths[i] for i in [1, 2] if i < len(text_widths)]), max_box_width - 2 * padding)
- внимание title_height = sum([text_heights[i] for i in [1, 2] if i < len(text_heights)]) + (len(title_lines) - 1) * 8 + padding
+        title_height = sum([text_heights[i] for i in [1, 2] if i < len(text_heights)]) + (len(title_lines) - 1) * 8 + padding
         title_box = Image.new("RGBA", (int(title_width + 2 * padding), int(title_height)), (0, 0, 0, 0))
         title_draw = ImageDraw.Draw(title_box)
         title_draw.rounded_rectangle(
