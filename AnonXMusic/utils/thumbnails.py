@@ -118,9 +118,9 @@ async def get_thumb(videoid, title_max_length=25):
 
         # Prepare text with dynamic truncation
         title = truncate_text(title, title_max_length)
-        views = truncate_text(views, 15)
-        duration = truncate_text(duration, 15)
-        channel = truncate_text(channel, 15)
+        views = truncate_text(views, 20)
+        duration = truncate_text(duration, 20)
+        channel = truncate_text(channel, 30)
 
         # Wrap title text
         para = textwrap.wrap(title, width=25)
@@ -177,7 +177,7 @@ async def get_thumb(videoid, title_max_length=25):
         draw.text(
             (start_x + (now_playing_width - text_widths[0]) // 2, current_y),
             "Now Playing",
-            fill="black",
+            fill="white",
             stroke_width=1,
             stroke_fill="white",
             font=now_playing_font
