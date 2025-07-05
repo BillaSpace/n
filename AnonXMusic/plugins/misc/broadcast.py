@@ -2,7 +2,7 @@ import asyncio
 import logging
 from pyrogram import filters
 from pyrogram.enums import ChatMembersFilter
-from pyrogram.errors import FloodWait, RPCError
+from pyrogram.errors import FloodWait, RPCError, ChatAdminRequired, ChannelPrivate
 
 from AnonXMusic import app
 from AnonXMusic.misc import SUDOERS
@@ -60,6 +60,8 @@ async def braodcast_message(client, message, _):
                     if not isinstance(i, int) or i >= 0:
                         logging.warning(f"Invalid chat ID {i}, skipping.")
                         continue
+                    # Check if bot is still a member of the chat
+                    await app.get_chat(i)
                     if content_type == 'photo':
                         await app.send_photo(chat_id=i, photo=file_id, caption=caption, reply_markup=reply_markup)
                     else:
@@ -69,6 +71,9 @@ async def braodcast_message(client, message, _):
                 except FloodWait as fw:
                     logging.info(f"FloodWait for chat {i}: waiting {fw.x} seconds")
                     await asyncio.sleep(fw.x)
+                except ChannelPrivate:
+                    logging.error(f"Chat {i} is private or inaccessible, skipping.")
+                    continue
                 except RPCError as e:
                     logging.error(f"Error broadcasting to chat {i}: {e}")
                     continue
@@ -121,7 +126,7 @@ async def braodcast_message(client, message, _):
             query = query.replace("-nobot", "")
         if "-pinloud" in query:
             query = query.replace("-pinloud", "")
-        if "-assistant" in query:
+        if "-assistant" in message.text:
             query = query.replace("-assistant", "")
         if "-user" in query:
             query = query.replace("-user", "")
@@ -148,6 +153,8 @@ async def braodcast_message(client, message, _):
             chats.append(int(chat))  # Convert Int64 to int
         for i in chats:
             try:
+                # Check if bot is still a member of the chat
+                await app.get_chat(i)
                 m = (
                     await app.copy_message(chat_id=i, from_chat_id=y, message_id=x, reply_markup=reply_markup)
                     if message.reply_to_message
@@ -157,14 +164,14 @@ async def braodcast_message(client, message, _):
                     try:
                         await m.pin(disable_notification=True)
                         pin += 1
-                    except RPCError as e:
+                    except (RPCError, ChatAdminRequired) as e:
                         logging.error(f"Error pinning in chat {i}: {e}")
                         continue
                 elif "-pinloud" in message.text:
                     try:
                         await m.pin(disable_notification=False)
                         pin += 1
-                    except RPCError as e:
+                    except (RPCError, ChatAdminRequired) as e:
                         logging.error(f"Error pinning in chat {i}: {e}")
                         continue
                 sent += 1
@@ -172,6 +179,9 @@ async def braodcast_message(client, message, _):
             except FloodWait as fw:
                 logging.info(f"FloodWait for chat {i}: waiting {fw.value} seconds")
                 await asyncio.sleep(fw.value)
+            except ChannelPrivate:
+                logging.error(f"Chat {i} is private or inaccessible, skipping.")
+                continue
             except RPCError as e:
                 logging.error(f"Error broadcasting to chat {i}: {e}")
                 continue
@@ -234,6 +244,9 @@ async def braodcast_message(client, message, _):
                 except FloodWait as fw:
                     logging.info(f"FloodWait for assistant {num} in chat {dialog.chat.id}: waiting {fw.value} seconds")
                     await asyncio.sleep(fw.value)
+                except ChannelPrivate:
+                    logging.error(f"Chat {dialog.chat.id} is private or inaccessible for assistant {num}, skipping.")
+                    continue
                 except RPCError as e:
                     logging.error(f"Error broadcasting via assistant {num} to chat {dialog.chat.id}: {e}")
                     continue
@@ -260,6 +273,9 @@ async def auto_clean():
                     for user in authusers:
                         user_id = await alpha_to_int(user)
                         adminlist[chat_id].append(user_id)
+        except ChannelPrivate:
+            logging.error(f"Chat {chat_id} is private or inaccessible in auto_clean, skipping.")
+            continue
         except Exception as e:
             logging.error(f"Error in auto_clean for chat {chat_id}: {e}")
             continue
