@@ -36,7 +36,7 @@ def truncate_text(text, max_length, add_ellipsis=True):
         return text
     return text[:max_length-3] + "..." if add_ellipsis else text[:max_length]
 
-async def get_thumb(videoid, title_max_length=30):
+async def get_thumb(videoid, title_max_length=20):
     """Generate a thumbnail for a YouTube video with a single background box."""
     logger.info(f"Processing thumbnail for video ID: {videoid}")
     cache_path = f"cache/{videoid}.png"
@@ -124,9 +124,9 @@ async def get_thumb(videoid, title_max_length=30):
         # Initialize drawing context and fonts
         draw = ImageDraw.Draw(background)
         try:
-            title_font = ImageFont.truetype("AnonXMusic/assets/font.ttf", 40)  # Increased title font size
+            title_font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 50)  # Increased title font size
             now_playing_font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 50)  # Now Playing
-            info_font = ImageFont.truetype("AnonXMusic/assets/font2.ttf", 30)  # Smaller views, duration, channel
+            info_font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 30)  # Smaller views, duration, channel
             name_font = ImageFont.truetype("AnonXMusic/assets/font4.ttf", 28)  # App name
             logger.info(f"Fonts loaded successfully for video ID: {videoid}")
         except IOError as e:
@@ -142,7 +142,7 @@ async def get_thumb(videoid, title_max_length=30):
         title = truncate_text(title, title_max_length)
         views = truncate_text(views, 20)
         duration = truncate_text(duration, 15)
-        channel = truncate_text(channel, 20)
+        channel = truncate_text(channel, 15)
         logger.info(f"Text prepared: title={title}, views={views}, duration={duration}, channel={channel}")
 
         # Wrap title text
@@ -178,7 +178,7 @@ async def get_thumb(videoid, title_max_length=30):
 
         # Center boxes horizontally
         start_x = (image2.width - max(now_playing_width, main_box_width) - thumb_size - thumb_gap) // 2
-        start_y = (image2.height - (now_playing_height + boxed by main_box_height + box_gap)) // 2
+        start_y = (image2.height - (now_playing_height + main_box_height + box_gap)) // 2
         logger.info(f"Box positions: start_x={start_x}, start_y={start_y}")
 
         # "Now Playing" box
