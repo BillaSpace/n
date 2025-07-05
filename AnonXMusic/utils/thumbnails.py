@@ -105,10 +105,10 @@ def prepare_background_image(videoid, thumbnail_path):
 def load_fonts(videoid):
     """Load fonts with fallback to default."""
     try:
-        now_playing_font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 50)
-        title_font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 40)
+        now_playing_font = ImageFont.truetype("AnonXMusic/assets/font.ttf", 50)
+        title_font = ImageFont.truetype("AnonXMusic/assets/font2.ttf", 40)
         info_font = ImageFont.truetype("AnonXMusic/assets/font2.ttf", 30)
-        name_font = ImageFont.truetype("AnonXMusic/assets/font4.ttf", 28)
+        name_font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 28)
     except IOError as e:
         logger.error(f"Error loading fonts for video ID {videoid}: {str(e)}")
         now_playing_font = title_font = info_font = name_font = ImageFont.load_default()
@@ -119,7 +119,7 @@ def prepare_text_lines(metadata, title_max_length=17):
     title = truncate_text(metadata["title"], title_max_length)
     views = truncate_text(metadata["views"], 20)
     duration = truncate_text(metadata["duration"], 15)
-    channel = truncate_text(metadata["channel"], 15)
+    channel = truncate_text(metadata["channel"], 20)
     return title, views, duration, channel
 
 def calculate_text_dimensions(draw, text_lines, now_playing_font, title_font, info_font, max_box_width, padding=15):
