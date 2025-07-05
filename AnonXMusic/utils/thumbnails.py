@@ -124,7 +124,7 @@ async def get_thumb(videoid, title_max_length=30):
         # Initialize drawing context and fonts
         draw = ImageDraw.Draw(background)
         try:
-            title_font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 40)  # Increased title font size
+            title_font = ImageFont.truetype("AnonXMusic/assets/font.ttf", 40)  # Increased title font size
             now_playing_font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 50)  # Now Playing
             info_font = ImageFont.truetype("AnonXMusic/assets/font2.ttf", 30)  # Smaller views, duration, channel
             name_font = ImageFont.truetype("AnonXMusic/assets/font4.ttf", 28)  # App name
