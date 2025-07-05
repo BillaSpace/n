@@ -60,7 +60,7 @@ async def get_thumb(videoid):
         youtube = Image.open(f"cache/thumb{videoid}.png")
         image1 = changeImageSize(1280, 720, youtube)
         image2 = image1.convert("RGBA")
-        background = image2.filter(filter=ImageFilter.BoxBlur(30))
+        background = image2.filter(filter=ImageFilter.BoxBlur(10))
         enhancer = ImageEnhance.Brightness(background)
         background = enhancer.enhance(0.6)
         Xcenter = youtube.width / 2
@@ -70,14 +70,14 @@ async def get_thumb(videoid):
         x2 = Xcenter + 250
         y2 = Ycenter + 250
         logo = youtube.crop((x1, y1, x2, y2))
-        logo.thumbnail((520, 520), Image.ANTIALIAS)
+        logo.thumbnail((520, 520), Image.Resampling.LANCZOS)  # Updated for compatibility
         logo = ImageOps.expand(logo, border=15, fill="white")
         background.paste(logo, (50, 100))
         draw = ImageDraw.Draw(background)
-        font = ImageFont.truetype("assets/font2.ttf", 40)
-        font2 = ImageFont.truetype("assets/font2.ttf", 70)
-        arial = ImageFont.truetype("assets/font2.ttf", 30)
-        name_font = ImageFont.truetype("assets/font.ttf", 30)
+        font = ImageFont.truetype("AnonXMusic/assets/font4.ttf", 40)  # Title
+        font2 = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 70)  # Now Playing
+        arial = ImageFont.truetype("AnonXMusic/assets/font4.ttf", 30)  # Views, Duration, Channel
+        name_font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 30)  # App name
         para = textwrap.wrap(title, width=32)
         j = 0
         draw.text(
