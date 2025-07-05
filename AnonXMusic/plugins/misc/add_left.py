@@ -13,16 +13,18 @@ async def on_new_chat_members(_, message: Message):
         added_by = message.from_user.mention if message.from_user else "ᴜɴᴋɴᴏᴡɴ ᴜsᴇʀ"
         username = f"@{message.chat.username}" if message.chat.username else None
         riruru = f"✫ <b><u>#New ɢʀᴏᴜᴘ</u></b> :\n\nᴄʜᴀᴛ ɪᴅ : {message.chat.id}\nᴄʜᴀᴛ ᴜsᴇʀɴᴀᴍᴇ : {username}\nᴄʜᴀᴛ ᴛɪᴛʟᴇ : {message.chat.title}\n\nᴀᴅᴅᴇᴅ ʙʏ : {added_by}"
-        butt = InlineKeyboardMarkup(
-            [
+        butt = close_markup()  # Default to close button if no user info
+        if message.from_user:
+            butt = InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton(
-                        text=message.from_user.first_name,
-                        user_id=message.from_user.id,
-                    )
+                    [
+                        InlineKeyboardButton(
+                            text=message.from_user.first_name,
+                            user_id=message.from_user.id,
+                        )
+                    ]
                 ]
-            ]
-        )
+            )
         try:
             await app.send_message(chat_id=LOG_ID, text=riruru, reply_markup=butt)
         except:
@@ -34,16 +36,18 @@ async def on_left_chat_member(client: Client, message: Message):
         remove_by = message.from_user.mention if message.from_user else "ᴜɴᴋɴᴏᴡɴ ᴜsᴇʀ"
         username = f"@{message.chat.username}" if message.chat.username else None
         riruru = f"✫ <b><u>#Left ɢʀᴏᴜᴘ</u></b> :\n\nᴄʜᴀᴛ ɪᴅ : {message.chat.id}\nᴄʜᴀᴛ ᴜsᴇʀɴᴀᴍᴇ : {username}\nᴄʜᴀᴛ ᴛɪᴛʟᴇ : {message.chat.title}\n\nʀᴇᴍᴏᴠᴇᴅ ʙʏ : {remove_by}"
-        butt = InlineKeyboardMarkup(
-            [
+        butt = close_markup()  # Default to close button if no user info
+        if message.from_user:
+            butt = InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton(
-                        text=message.from_user.first_name,
-                        user_id=message.from_user.id,
-                    )
+                    [
+                        InlineKeyboardButton(
+                            text=message.from_user.first_name,
+                            user_id=message.from_user.id,
+                        )
+                    ]
                 ]
-            ]
-        )
+            )
         try:
             await app.send_message(chat_id=LOG_ID, text=riruru, reply_markup=butt)
         except:
