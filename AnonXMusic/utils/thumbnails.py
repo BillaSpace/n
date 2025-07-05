@@ -117,7 +117,7 @@ def load_fonts(videoid):
 def prepare_text_lines(metadata, title_max_length=17):
     """Prepare and truncate text for thumbnail."""
     title = truncate_text(metadata["title"], title_max_length)
-    views = truncate_text(metadata["views"], 20)
+    views = truncate_text(metadata["views"], 15)
     duration = truncate_text(metadata["duration"], 15)
     channel = truncate_text(metadata["channel"], 20)
     return title, views, duration, channel
