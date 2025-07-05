@@ -108,16 +108,17 @@ async def get_thumb(videoid, title_max_length=20):
         # Initialize drawing context and fonts
         draw = ImageDraw.Draw(background)
         try:
-            font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 25)  # Title and Now Playing
-            font2 = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 30)  # Now Playing
-            arial = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 15)  # Views, Duration, Channel
+            font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 45)  # Title
+            font2 = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 50)  # Now Playing (slightly larger)
+            arial = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 35)  # Views, Duration, Channel
             name_font = ImageFont.truetype("AnonXMusic/assets/font4.ttf", 28)  # App name
         except IOError:
             font = font2 = arial = name_font = ImageFont.load_default()
 
         # Text positions and gaps
-        padding = 10  # Slightly increased padding for box-text gap
-        box_gap = 15  # Gap between text lines
+        padding = 15  # Padding inside boxes
+        box_gap = 10  # Gap between text lines
+        thumb_gap = 40  # Gap between thumbnail and text
         max_box_width = logo_pos_x - thumb_gap - 100  # Space for text box
 
         # Prepare text with dynamic truncation
@@ -141,50 +142,61 @@ async def get_thumb(videoid, title_max_length=20):
             text_heights.append(text_height)
             text_widths.append(text_width)
 
-        # Calculate total text block height and width for centering
+        # Calculate "Now Playing" box dimensions (rectangular)
+        now_playing_width = text_widths[0] + 2 * padding + 30  # Slightly wider than title
+        now_playing_height = text_heights[0] + 2 * padding  # Fit text height
+        radius = 15  # Fixed radius for rounded corners
         total_text_height = sum(text_heights) + (len(text_lines) - 1) * box_gap + 2 * padding
-        total_text_width = max(text_widths[1:]) + 2 * padding  # Exclude Now Playing for main box width
-        start_x = (image2.width - total_text_width - thumb_size - thumb_gap) // 2  # Center horizontally
-        start_y = (image2.height - total_text_height) // 2  # Center vertically
+        total_text_width = max(text_widths[1:]) + 2 * padding  # Width based on title, views, etc.
 
-        # Now Playing box (separate, square, semi-transparent)
-        now_playing_width = text_widths[0] + 2 * padding
-        now_playing_height = max(text_heights[0] + 2 * padding, now_playing_width)  # Square box
-        radius = now_playing_height // 4  # Dynamic radius
+        # Calculate main text box dimensions (rectangular, aligned with "Now Playing")
+        main_box_width = max(now_playing_width - 10, total_text_width)  # Slightly narrower than "Now Playing"
+        main_box_height = sum(text_heights[1:]) + (len(text_lines[1:]) - 1) * box_gap + 2 * padding
+
+        # Center boxes horizontally
+        start_x = (image2.width - max(now_playing_width, main_box_width) - thumb_size - thumb_gap) // 2
+        start_y = (image2.height - (now_playing_height + main_box_height + box_gap)) // 2  # Center vertically
+
+        # "Now Playing" box (rectangular, rounded corners, semi-transparent)
         now_playing_box = Image.new("RGBA", (int(now_playing_width), int(now_playing_height)), (0, 0, 0, 0))
         now_playing_draw = ImageDraw.Draw(now_playing_box)
         now_playing_draw.rounded_rectangle(
-            [(0, 0), (now_playing_width, now_playing_height)], radius=radius, fill=(0, 0, 0, 140)  # More transparent
+            [(0, 0), (now_playing_width, now_playing_height)], radius=radius, fill=(0, 0, 0, 160)  # Slightly less transparent
         )
-        now_playing_box = now_playing_box.filter(ImageFilter.GaussianBlur(2))
-        background.paste(now_playing_box, (start_x - padding, start_y - padding), now_playing_box)
+        now_playing_box = now_playing_box.filter(ImageFilter.GaussianBlur(1))  # Reduced blur
+        background.paste(now_playing_box, (start_x, start_y), now_playing_box)
 
-        # Main text box (Title, Views, Duration, Channel, square, semi-transparent)
-        main_box_width = total_text_width
-        main_box_height = max(
-            sum(text_heights[1:]) + (len(text_lines[1:]) - 1) * box_gap + 2 * padding,
-            main_box_width
-        )  # Square box
-        radius = main_box_height // 4  # Dynamic radius
+        # Main text box (rectangular, rounded corners, semi-transparent)
         main_box = Image.new("RGBA", (int(main_box_width), int(main_box_height)), (0, 0, 0, 0))
         main_draw = ImageDraw.Draw(main_box)
         main_draw.rounded_rectangle(
-            [(0, 0), (main_box_width, main_box_height)], radius=radius, fill=(0, 0, 0, 140)  # More transparent
+            [(0, 0), (main_box_width, main_box_height)], radius=radius, fill=(0, 0, 0, 160)
         )
-        main_box = main_box.filter(ImageFilter.GaussianBlur(2))
+        main_box = main_box.filter(ImageFilter.GaussianBlur(1))  # Reduced blur
         main_y = start_y + now_playing_height + box_gap
-        background.paste(main_box, (start_x - padding, int(main_y) - padding), main_box)
+        background.paste(main_box, (start_x + (now_playing_width - main_box_width) // 2, int(main_y)), main_box)
 
         # Draw text
-        current_y = start_y + (now_playing_height - text_heights[0]) // 2  # Center text in box
+        current_y = start_y + (now_playing_height - text_heights[0]) // 2  # Center "Now Playing" vertically
         draw.text(
-            (start_x, current_y), "Now Playing", fill="white", stroke_width=1, stroke_fill="white", font=font2
+            (start_x + (now_playing_width - text_widths[0]) // 2, current_y),  # Center horizontally
+            "Now Playing",
+            fill="black",
+            stroke_width=1,
+            stroke_fill="white",
+            font=font2
         )
         current_y = main_y + padding
         for i, line in enumerate(text_lines[1:], 1):
             font_to_use = font if i in [1, 2] else arial
+            text_width = text_widths[i]
             draw.text(
-                (start_x, current_y), line, fill="white", stroke_width=1, stroke_fill="white", font=font_to_use
+                (start_x + (now_playing_width - main_box_width) // 2 + (main_box_width - text_width) // 2, current_y),  # Center horizontally
+                line,
+                fill="white",
+                stroke_width=1,
+                stroke_fill="white",
+                font=font_to_use
             )
             current_y += text_heights[i] + box_gap
 
