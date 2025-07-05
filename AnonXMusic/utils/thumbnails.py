@@ -54,7 +54,7 @@ async def fetch_video_metadata(videoid):
 async def download_thumbnail(videoid, thumbnail_url):
     """Download thumbnail image with retries."""
     async with aiohttp.ClientSession() as session:
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 async with session.get(thumbnail_url) as resp:
                     if resp.status == 200:
@@ -174,7 +174,7 @@ def draw_text_boxes(background, text_lines, text_heights, text_widths, max_label
     )
     main_box = main_box.filter(ImageFilter.GaussianBlur(1))
     main_y = start_y + now_playing_height + box_gap
-    background.paste(main_box, (start_x + (now_playing_width - main_box_width) // 2, main_y), main  _box)
+    background.paste(main_box, (start_x + (now_playing_width - main_box_width) // 2, main_y), main_box)
 
     # Draw text with aligned captions
     draw = ImageDraw.Draw(background)
@@ -182,7 +182,7 @@ def draw_text_boxes(background, text_lines, text_heights, text_widths, max_label
     draw.text(
         (start_x + (now_playing_width - text_widths[0]) // 2, current_y),
         "Now Playing",
-        fill="white",
+        fill="black",
         stroke_width=1,
         stroke_fill="white",
         font=now_playing_font
@@ -280,7 +280,7 @@ async def get_thumb(videoid, title_max_length=17):
         background.save(cache_path)
         return cache_path
 
-    except Exceptionಸ, Exception as e:
+    except Exception as e:
         logger.error(f"Error in get_thumb for video ID {videoid}: {str(e)}")
         if "WebpageMediaEmpty" in str(e):
             logger.error(f"WebpageMediaEmpty: No valid media for video ID {videoid}")
