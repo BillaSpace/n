@@ -47,59 +47,7 @@ async def get_thumb(videoid):
             except:
                 title = "Unsupported Title"
             duration = video.get("duration", "Unknown Mins")
-            thumbnail = video.get("thumbnails", [{}])[0].get("url",……
-
-```python
-import os
-import re
-import textwrap
-import logging
-
-import aiofiles
-import aiohttp
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
-from youtubesearchpython.__future__ import VideosSearch
-
-from AnonXMusic import app
-from config import YOUTUBE_IMG_URL
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-def changeImageSize(maxWidth, maxHeight, image):
-    widthRatio = maxWidth / image.size[0]
-    heightRatio = maxHeight / image.size[1]
-    newWidth = int(widthRatio * image.size[0])
-    newHeight = int(heightRatio * image.size[1])
-    newImage = image.resize((newWidth, newHeight))
-    return newImage
-
-async def get_thumb(videoid):
-    if os.path.isfile(f"cache/{videoid}.png"):
-        return f"cache/{videoid}.png"
-
-    # Validate video ID
-    if not videoid or not re.match(r'^[a-zA-Z0-9_-]{11}$', videoid):
-        logger.error(f"Invalid video ID: {videoid}")
-        return YOUTUBE_IMG_URL
-
-    try:
-        # Use video ID directly for search
-        results = VideosSearch(videoid, limit=1)
-        result = (await results.next())["result"]
-        if not result:
-            logger.error(f"No results found for video ID: {videoid}")
-            return YOUTUBE_IMG_URL
-
-        for video in result:
-            try:
-                title = video.get("title", "Unsupported Title")
-                title = re.sub("\W+", " ", title).title()
-            except:
-                title = "Unsupported Title"
-            duration = video.get("duration", "Unknown Mins")
-            thumbnail = video.get("thumbnails", [{}])[0].get("url", "").split("?")[0]
+            thumbnail = video.get("thumbnails", [{}])[0].get("url", "")
             views = video.get("viewCount", {}).get("short", "Unknown Views")
             channel = video.get("channel", {}).get("name", "Unknown Channel")
 
@@ -131,7 +79,7 @@ async def get_thumb(videoid):
         image2 = image1.convert("RGBA")
         background = image2.filter(filter=ImageFilter.BoxBlur(10))
         enhancer = ImageEnhance.Brightness(background)
-        background = enhancer.enhance(0.6)
+        background = enhancer.enhance(0.7)
         Xcenter = youtube.width / 2
         Ycenter = youtube.height / 2
         x1 = Xcenter - 250
@@ -178,7 +126,7 @@ async def get_thumb(videoid):
 
         # Create a new image for the blur box
         blur_box = Image.new("RGBA", (int(box_width), int(box_height)), (0, 0, 0, 0))
-        blur_draw = ImageDraw.Draw(blur_box)  # Fixed: Changed 'ickson' to 'blur_box'
+        blur_draw = ImageDraw.Draw(blur_box)
         blur_draw.rounded_rectangle(
             [(0, 0), (box_width, box_height)],
             radius=20,
