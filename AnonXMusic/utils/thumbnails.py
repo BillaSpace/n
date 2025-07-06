@@ -10,6 +10,7 @@ from youtubesearchpython.__future__ import VideosSearch
 from AnonXMusic import app
 from config import YOUTUBE_IMG_URL
 
+# Configure logging for errors only
 logging.basicConfig(
     level=logging.ERROR,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -18,16 +19,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def resize_image(image, max_width=1280, max_height=720):
+    """Resize image while maintaining aspect ratio."""
     ratio = min(max_width / image.size[0], max_height / image.size[1])
     new_width, new_height = int(image.size[0] * ratio), int(image.size[1] * ratio)
     return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
 def truncate_text(text, max_length, add_ellipsis=True):
+    """Truncate text to a specified length with optional ellipsis."""
     if len(text) <= max_length:
         return text
     return text[:max_length-3] + "..." if add_ellipsis else text[:max_length]
 
 async def fetch_video_metadata(videoid):
+    """Fetch YouTube video metadata."""
     try:
         results = VideosSearch(videoid, limit=1)
         result = await results.next()
@@ -35,18 +39,20 @@ async def fetch_video_metadata(videoid):
             logger.error(f"No metadata found for video ID: {videoid}")
             return None
         video = result["result"][0]
-        return {
+        metadata = {
             "title": re.sub(r"\W+", " ", video.get("title", "Unsupported Title")).title(),
             "duration": video.get("duration", "Unknown Mins"),
             "thumbnail_url": video.get("thumbnails", [{}])[0].get("url", ""),
             "views": video.get("viewCount", {}).get("text", "Unknown"),
             "channel": video.get("channel", {}).get("name", "Unknown Channel")
         }
+        return metadata
     except Exception as e:
         logger.error(f"Error fetching metadata for video ID {videoid}: {str(e)}")
         return None
 
 async def download_thumbnail(videoid, thumbnail_url):
+    """Download thumbnail image with retries."""
     async with aiohttp.ClientSession() as session:
         for attempt in range(2):
             try:
@@ -55,12 +61,17 @@ async def download_thumbnail(videoid, thumbnail_url):
                         async with aiofiles.open(f"cache/thumb{videoid}.png", mode="wb") as f:
                             await f.write(await resp.read())
                         return True
+                    if attempt == 2:
+                        logger.error(f"Failed to download thumbnail after 3 attempts for video ID: {videoid}")
+                        return False
             except Exception as e:
-                logger.error(f"Attempt {attempt+1}: {e}")
-    logger.error(f"Failed to download thumbnail for video ID: {videoid}")
+                if attempt == 2:
+                    logger.error(f"Error downloading thumbnail for video ID {videoid}: {str(e)}")
+                    return False
     return False
 
 def prepare_background_image(videoid, thumbnail_path):
+    """Prepare blurred background with thumbnail logo."""
     try:
         base_image = Image.open(thumbnail_path)
     except Exception as e:
@@ -72,9 +83,12 @@ def prepare_background_image(videoid, thumbnail_path):
     background = rgba_image.filter(ImageFilter.BoxBlur(10))
     background = ImageEnhance.Brightness(background).enhance(0.7)
 
+    # Create square thumbnail with rounded corners
     thumb_size = 450
     x_center, y_center = base_image.width / 2, base_image.height / 2
-    crop_width = crop_height = min(base_image.width, base_image.height)
+    aspect_ratio = base_image.width / base_image.height
+    crop_width = min(base_image.width, base_image.height) if aspect_ratio > 1 else min(base_image.height, base_image.width)
+    crop_height = crop_width
     x1, y1 = x_center - crop_width / 2, y_center - crop_height / 2
     x2, y2 = x_center + crop_width / 2, y_center + crop_height / 2
     logo = base_image.crop((x1, y1, x2, y2))
@@ -82,157 +96,174 @@ def prepare_background_image(videoid, thumbnail_path):
     mask = Image.new("L", (thumb_size, thumb_size), 0)
     ImageDraw.Draw(mask).rounded_rectangle([(0, 0), (thumb_size, thumb_size)], radius=20, fill=255)
     logo.putalpha(mask)
-    logo_pos_x = rgba_image.width - thumb_size - 40
+    thumb_gap = 40
+    logo_pos_x = rgba_image.width - thumb_size - thumb_gap
     logo_pos_y = (rgba_image.height - thumb_size) // 2
     background.paste(logo, (logo_pos_x, logo_pos_y), logo)
     return background
 
 def load_fonts(videoid):
+    """Load fonts with fallback to default."""
     try:
-        return (
-            ImageFont.truetype("AnonXMusic/assets/font4.ttf", 50),  # Now Playing
-            ImageFont.truetype("AnonXMusic/assets/font2.ttf", 42),  # Track label
-            ImageFont.truetype("AnonXMusic/assets/font.ttf", 30),   # Info label
-            ImageFont.truetype("AnonXMusic/assets/font3.ttf", 26)   # App name
-        )
+        now_playing_font = ImageFont.truetype("AnonXMusic/assets/font.ttf", 50)
+        title_font = ImageFont.truetype("AnonXMusic/assets/font2.ttf", 40)
+        info_font = ImageFont.truetype("AnonXMusic/assets/font2.ttf", 30)
+        name_font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 28)
     except IOError as e:
         logger.error(f"Error loading fonts for video ID {videoid}: {str(e)}")
-        return (ImageFont.load_default(),) * 4
+        now_playing_font = title_font = info_font = name_font = ImageFont.load_default()
+    return now_playing_font, title_font, info_font, name_font
 
-def prepare_text_lines(metadata, title_max_length=40):
+def prepare_text_lines(metadata, title_max_length=17):
+    """Prepare and truncate text for thumbnail."""
     title = truncate_text(metadata["title"], title_max_length)
-    views = truncate_text(metadata["views"], 20)
-    duration = truncate_text(metadata["duration"], 20)
-    channel = truncate_text(metadata["channel"], 25)
-    return [
-        "Now Playing",
-        f"Track: {title}",
-        f"Views: {views}",
-        f"Duration: {duration}",
-        f"Channel: {channel}"
-    ]
+    views = truncate_text(metadata["views"], 15)
+    duration = truncate_text(metadata["duration"], 15)
+    channel = truncate_text(metadata["channel"], 20)
+    return title, views, duration, channel
 
-def calculate_text_dimensions(draw, text_lines, fonts, max_box_width, padding=15):
-    now_playing_font, title_font, info_font, _ = fonts
+def calculate_text_dimensions(draw, text_lines, now_playing_font, title_font, info_font, max_box_width, padding=15):
+    """Calculate text dimensions and alignment for captions."""
     text_heights = []
     text_widths = []
     max_label_width = 0
-
     for i, line in enumerate(text_lines):
-        font = (
-            now_playing_font if i == 0
-            else title_font if i == 1
-            else info_font
-        )
-        label = line.split(":", 1)[0] + ":"
-        label_bbox = draw.textbbox((0, 0), label, font=font)
-        max_label_width = max(max_label_width, label_bbox[2] - label_bbox[0])
-
+        font = now_playing_font if i == 0 else title_font if i in [1, 2] else info_font
         bbox = draw.textbbox((0, 0), line, font=font)
+        text_width = min(bbox[2] - bbox[0], max_box_width - 2 * padding)
         text_heights.append(bbox[3] - bbox[1])
-        text_widths.append(bbox[2] - bbox[0])
-
+        text_widths.append(text_width)
+        if i >= 3:
+            label = line.split(":")[0] + ":"
+            label_bbox = draw.textbbox((0, 0), label, font=info_font)
+            max_label_width = max(max_label_width, label_bbox[2] - label_bbox[0])
     return text_heights, text_widths, max_label_width
 
-def draw_text_boxes(background, text_lines, text_heights, text_widths, max_label_width, fonts, videoid):
-    now_playing_font, title_font, info_font, name_font = fonts
-    draw = ImageDraw.Draw(background)
+def draw_text_boxes(background, text_lines, text_heights, text_widths, max_label_width, now_playing_font, title_font, info_font, videoid):
+    padding = 20
+    box_gap = 25
+    scale_factor = 1.0
+    radius = 16
 
-    padding = 20
-    box_gap = 12
-    radius = 12
+    # Width of all boxes (uniform)
+    box_width = int(max(text_widths) + 2 * padding)
 
-    now_playing_w = text_widths[0] + 2 * padding
-    now_playing_h = text_heights[0] + 2 * padding
+    # Compute individual box heights
+    now_playing_height = text_heights[0] + 2 * padding
+    details_box_height = sum(text_heights[1:]) + (len(text_heights[1:]) - 1) * 10 + 2 * padding
 
-    main_w = max_label_width + 300
-    main_h = sum(text_heights[1:]) + (len(text_heights[1:]) - 1) * box_gap + 2 * padding
+    total_height = now_playing_height + details_box_height + box_gap
 
-    total_width = now_playing_w
-    thumb_size = 450
-    thumb_gap = 40
-    start_x = (background.width - total_width - thumb_size - thumb_gap) // 2
-    start_y = (background.height - (now_playing_h + main_h + box_gap)) // 2
+    # Calculate start X and Y
+    thumb_size = 450
+    thumb_gap = 40
+    start_x = (background.width - box_width - thumb_size - thumb_gap) // 2
+    start_y = (background.height - total_height) // 2
 
-    now_box = Image.new("RGBA", (now_playing_w, now_playing_h), (0, 0, 0, 160))
-    ImageDraw.Draw(now_box).rounded_rectangle([(0, 0), (now_playing_w, now_playing_h)], radius=radius, fill=(0, 0, 0, 160))
-    background.paste(now_box, (start_x, start_y), now_box)
+    # Draw "Now Playing :" box
+    now_playing_box = Image.new("RGBA", (box_width, now_playing_height), (0, 0, 0, 0))
+    ImageDraw.Draw(now_playing_box).rounded_rectangle(
+        [(0, 0), (box_width, now_playing_height)], radius=radius, fill=(0, 0, 0, 160)
+    )
+    now_playing_box = now_playing_box.filter(ImageFilter.GaussianBlur(2))
+    background.paste(now_playing_box, (start_x, start_y), now_playing_box)
 
-    draw.text(
-        (start_x + padding, start_y + padding),
-        text_lines[0],
-        font=now_playing_font,
-        fill="white",
-        stroke_width=1,
-        stroke_fill="white"
-    )
+    # Draw details box
+    detail_box = Image.new("RGBA", (box_width, details_box_height), (0, 0, 0, 0))
+    ImageDraw.Draw(detail_box).rounded_rectangle(
+        [(0, 0), (box_width, details_box_height)], radius=radius, fill=(0, 0, 0, 160)
+    )
+    detail_box = detail_box.filter(ImageFilter.GaussianBlur(1))
+    detail_start_y = start_y + now_playing_height + box_gap
+    background.paste(detail_box, (start_x, detail_start_y), detail_box)
 
-    box_x = start_x
-    box_y = start_y + now_playing_h + box_gap
+    # Draw text
+    draw = ImageDraw.Draw(background)
 
-    main_box = Image.new("RGBA", (main_w, main_h), (0, 0, 0, 160))
-    ImageDraw.Draw(main_box).rounded_rectangle([(0, 0), (main_w, main_h)], radius=radius, fill=(0, 0, 0, 160))
-    background.paste(main_box, (box_x, box_y), main_box)
+    # "Now Playing :"
+    draw.text(
+        (start_x + padding, start_y + padding),
+        text_lines[0],
+        fill="white",
+        stroke_width=1,
+        stroke_fill="black",
+        font=now_playing_font,
+    )
 
-    current_y = box_y + padding
-    for i in range(1, len(text_lines)):
-        label, value = text_lines[i].split(":", 1)
-        label_font = title_font if i == 1 else info_font
-        value_font = ImageFont.load_default()
-        label_x = box_x + padding
-        value_x = label_x + max_label_width + 10
+    # Details
+    current_y = detail_start_y + padding
+    for i, line in enumerate(text_lines[1:], 1):
+        draw.text(
+            (start_x + padding, current_y),
+            line,
+            fill="white",
+            stroke_width=1,
+            stroke_fill="white",
+            font=title_font if i == 1 else info_font,
+        )
+        current_y += text_heights[i] + 10
 
-        draw.text((label_x, current_y), label + ":", fill="white", font=label_font, stroke_width=1, stroke_fill="white")
-        draw.text((value_x, current_y), value.strip(), fill="white", font=value_font, stroke_width=1, stroke_fill="white")
+    return background
 
-        current_y += text_heights[i] + box_gap
-
-    return background
-
-async def get_thumb(videoid, title_max_length=50):
+async def get_thumb(videoid, title_max_length=17):
+    """Generate a YouTube video thumbnail with text overlay."""
     cache_path = f"cache/{videoid}.png"
     if os.path.isfile(cache_path):
         return cache_path
 
+    # Validate video ID
     if not videoid or not re.match(r'^[a-zA-Z0-9_-]{11}$', videoid):
         logger.error(f"Invalid video ID: {videoid}")
         return YOUTUBE_IMG_URL
 
     try:
+        # Fetch metadata
         metadata = await fetch_video_metadata(videoid)
         if not metadata:
             return YOUTUBE_IMG_URL
 
+        # Download thumbnail
         if not await download_thumbnail(videoid, metadata["thumbnail_url"]):
             return YOUTUBE_IMG_URL
 
+        # Prepare background image
         background = prepare_background_image(videoid, f"cache/thumb{videoid}.png")
         if not background:
             return YOUTUBE_IMG_URL
 
-        fonts = load_fonts(videoid)
-        text_lines = prepare_text_lines(metadata, title_max_length)
+        # Load fonts
+        now_playing_font, title_font, info_font, name_font = load_fonts(videoid)
 
+        # Prepare text
+        title, views, duration, channel = prepare_text_lines(metadata, title_max_length)
+        text_lines = ["Now Playing"] + [f"Track: {line}" for line in textwrap.wrap(title, width=20)[:2]] + [f"Views: {views}", f"Duration: {duration}", f"Channel: {channel}"]
+
+        # Calculate text dimensions with constrained width
         draw = ImageDraw.Draw(background)
         max_box_width = background.width - 450 - 40 - 100
-        text_heights, text_widths, max_label_width = calculate_text_dimensions(draw, text_lines, fonts, max_box_width)
-
-        background = draw_text_boxes(background, text_lines, text_heights, text_widths, max_label_width, fonts, videoid)
-
-        name_font = fonts[3]
-        draw.text(
-            (background.width - 10 - draw.textlength(app.name, font=name_font), background.height - 35),
-            f"{app.name}", fill="white", font=name_font
+        text_heights, text_widths, max_label_width = calculate_text_dimensions(
+            draw, text_lines, now_playing_font, title_font, info_font, max_box_width
         )
 
+        # Draw text and boxes
+        background = draw_text_boxes(
+            background, text_lines, text_heights, text_widths, max_label_width,
+            now_playing_font, title_font, info_font, videoid
+        )
+
+        # Draw app name
+        draw.text((5, 5), f"{app.name}", fill="white", font=name_font)
+
+        # Save thumbnail
         try:
             os.remove(f"cache/thumb{videoid}.png")
         except:
-            logger.error(f"Failed to clean up temp thumb for video ID: {videoid}")
-
+            logger.error(f"Failed to clean up temporary thumbnail file for video ID: {videoid}")
         background.save(cache_path)
         return cache_path
 
     except Exception as e:
         logger.error(f"Error in get_thumb for video ID {videoid}: {str(e)}")
+        if "WebpageMediaEmpty" in str(e):
+            logger.error(f"WebpageMediaEmpty: No valid media for video ID {videoid}")
         return YOUTUBE_IMG_URL
