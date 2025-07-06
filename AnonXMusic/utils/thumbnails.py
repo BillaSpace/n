@@ -65,7 +65,7 @@ async def get_thumb(videoid, title_max_length=30):
 
         # Download thumbnail
         async with aiohttp.ClientSession() as session:
-            for attempt in range(3):
+            for attempt in range(2):
                 try:
                     async with session.get(thumbnail_url) as resp:
                         if resp.status == 200:
@@ -89,8 +89,8 @@ async def get_thumb(videoid, title_max_length=30):
 
         resized_image = resize_image(1280, 720, base_image)
         rgba_image = resized_image.convert("RGBA")
-        background = rgba_image.filter(ImageFilter.BoxBlur(10))
-        background = ImageEnhance.Brightness(background).enhance(0.7)
+        background = rgba_image.filter(ImageFilter.BoxBlur(11))
+        background = ImageEnhance.Brightness(background).enhance(0.9)
 
         # Create square thumbnail with rounded corners
         thumb_size = 450
@@ -113,10 +113,10 @@ async def get_thumb(videoid, title_max_length=30):
         # Load fonts
         draw = ImageDraw.Draw(background)
         try:
-            title_font = ImageFont.truetype("AnonXMusic/assets/font.ttf", 40)  # Larger title
+            title_font = ImageFont.truetype("AnonXMusic/assets/font.ttf", 35)  # Larger title
             now_playing_font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 45)  # Now Playing
             info_font = ImageFont.truetype("AnonXMusic/assets/font2.ttf", 30)  # Smaller views, duration, channel
-            name_font = ImageFont.truetype("AnonXMusic/assets/font4.ttf", 28)  # App name
+            name_font = ImageFont.truetype("AnonXMusic/assets/font4.ttf", 30)  # App name
         except IOError as e:
             logger.critical(f"Error loading fonts for video ID {videoid}: {str(e)}")
             title_font = now_playing_font = info_font = name_font = ImageFont.load_default()
@@ -126,12 +126,12 @@ async def get_thumb(videoid, title_max_length=30):
         box_gap = 10
         max_box_width = logo_pos_x - thumb_gap - 100
         title = truncate_text(title, title_max_length)
-        views = truncate_text(views, 20)
+        views = truncate_text(views, 16)
         duration = truncate_text(duration, 15)
         channel = truncate_text(channel, 15)
 
         # Wrap title and prepare text lines
-        para = textwrap.wrap(title, width=25)
+        para = textwrap.wrap(title, width=19)
         text_lines = ["Now Playing"] + para[:2] + [f"Duration: {duration}", f"Views: {views}", f"Channel: {channel}"]
         text_heights = []
         text_widths = []
@@ -154,7 +154,7 @@ async def get_thumb(videoid, title_max_length=30):
         scale_factor = 0.9
         now_playing_width = int((text_widths[0] + 2 * padding + 35) * scale_factor)  # Increased from +30 to +50
         now_playing_height = int((text_heights[0] + 2 * padding) * scale_factor)
-        radius = 14
+        radius = 17
         total_text_width = int((max(text_widths[1:]) + 2 * padding + 3) * scale_factor)  # Added +20 for wider main box
         main_box_height = int((sum(text_heights[1:]) + (len(text_lines[1:]) - 1) * box_gap + 2 * padding + 3) * scale_factor)  # Added +20 for taller main box
         main_box_width = int(max(now_playing_width - 10, total_text_width))
@@ -168,7 +168,7 @@ async def get_thumb(videoid, title_max_length=30):
         ImageDraw.Draw(now_playing_box).rounded_rectangle(
             [(0, 0), (now_playing_width, now_playing_height)], radius=radius, fill=(0, 0, 0, 160)
         )
-        now_playing_box = now_playing_box.filter(ImageFilter.GaussianBlur(2))
+        now_playing_box = now_playing_box.filter(ImageFilter.GaussianBlur(6))
         background.paste(now_playing_box, (start_x, start_y), now_playing_box)
 
         # Draw main text box
@@ -176,7 +176,7 @@ async def get_thumb(videoid, title_max_length=30):
         ImageDraw.Draw(main_box).rounded_rectangle(
             [(0, 0), (main_box_width, main_box_height)], radius=radius, fill=(0, 0, 0, 160)
         )
-        main_box = main_box.filter(ImageFilter.GaussianBlur(1))
+        main_box = main_box.filter(ImageFilter.GaussianBlur(4))
         main_y = start_y + now_playing_height + box_gap
         background.paste(main_box, (start_x + (now_playing_width - main_box_width) // 2, main_y), main_box)
 
@@ -209,9 +209,9 @@ async def get_thumb(videoid, title_max_length=30):
                 draw.text(
                     (value_x, current_y),
                     value.strip(),
-                    fill="white",
+                    fill="black",
                     stroke_width=1,
-                    stroke_fill="black",
+                    stroke_fill="white",
                     font=font
                 )
             else:  # Title text
