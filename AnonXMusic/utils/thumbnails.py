@@ -89,8 +89,8 @@ async def get_thumb(videoid, title_max_length=30):
 
         resized_image = resize_image(1280, 720, base_image)
         rgba_image = resized_image.convert("RGBA")
-        background = rgba_image.filter(ImageFilter.BoxBlur(11))
-        background = ImageEnhance.Brightness(background).enhance(0.9)
+        background = rgba_image.filter(ImageFilter.BoxBlur(10))
+        background = ImageEnhance.Brightness(background).enhance(0.8)
 
         # Create square thumbnail with rounded corners
         thumb_size = 450
@@ -126,12 +126,12 @@ async def get_thumb(videoid, title_max_length=30):
         box_gap = 10
         max_box_width = logo_pos_x - thumb_gap - 100
         title = truncate_text(title, title_max_length)
-        views = truncate_text(views, 16)
+        views = truncate_text(views, 12)
         duration = truncate_text(duration, 15)
         channel = truncate_text(channel, 15)
 
         # Wrap title and prepare text lines
-        para = textwrap.wrap(title, width=19)
+        para = textwrap.wrap(title, width=30)
         text_lines = ["Now Playing"] + para[:2] + [f"Duration: {duration}", f"Views: {views}", f"Channel: {channel}"]
         text_heights = []
         text_widths = []
@@ -154,9 +154,9 @@ async def get_thumb(videoid, title_max_length=30):
         scale_factor = 0.9
         now_playing_width = int((text_widths[0] + 2 * padding + 35) * scale_factor)  # Increased from +30 to +50
         now_playing_height = int((text_heights[0] + 2 * padding) * scale_factor)
-        radius = 17
-        total_text_width = int((max(text_widths[1:]) + 2 * padding + 3) * scale_factor)  # Added +20 for wider main box
-        main_box_height = int((sum(text_heights[1:]) + (len(text_lines[1:]) - 1) * box_gap + 2 * padding + 3) * scale_factor)  # Added +20 for taller main box
+        radius = 15
+        total_text_width = int((max(text_widths[1:]) + 2 * padding + 5) * scale_factor)  # Added +20 for wider main box
+        main_box_height = int((sum(text_heights[1:]) + (len(text_lines[1:]) - 1) * box_gap + 2 * padding + 5) * scale_factor)  # Added +20 for taller main box
         main_box_width = int(max(now_playing_width - 10, total_text_width))
 
         # Center boxes
@@ -209,7 +209,7 @@ async def get_thumb(videoid, title_max_length=30):
                 draw.text(
                     (value_x, current_y),
                     value.strip(),
-                    fill="black",
+                    fill="white",
                     stroke_width=1,
                     stroke_fill="white",
                     font=font
@@ -220,7 +220,7 @@ async def get_thumb(videoid, title_max_length=30):
                     line,
                     fill="white",
                     stroke_width=1,
-                    stroke_fill="white",
+                    stroke_fill="black",
                     font=font
                 )
             current_y += text_heights[i] + box_gap
