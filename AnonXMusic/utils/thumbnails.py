@@ -10,11 +10,11 @@ from youtubesearchpython.__future__ import VideosSearch
 from AnonXMusic import app
 from config import YOUTUBE_IMG_URL
 
-# Configure logging
+# Configure logging for critical errors only
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.CRITICAL,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(), logging.FileHandler('thumbnail_generator.log')]
+    handlers=[logging.FileHandler('thumb.log')]
 )
 logger = logging.getLogger(__name__)
 
@@ -35,24 +35,21 @@ def truncate_text(text, max_length, add_ellipsis=True):
 
 async def get_thumb(videoid, title_max_length=30):
     """Generate a YouTube video thumbnail with text overlay."""
-    logger.info(f"Processing thumbnail for video ID: {videoid}")
     cache_path = f"cache/{videoid}.png"
     if os.path.isfile(cache_path):
-        logger.info(f"Found cached thumbnail: {cache_path}")
         return cache_path
 
     # Validate video ID
     if not videoid or not re.match(r'^[a-zA-Z0-9_-]{11}$', videoid):
-        logger.error(f"Invalid video ID: {videoid}")
+        logger.critical(f"Invalid video ID: {videoid}")
         return YOUTUBE_IMG_URL
 
     try:
         # Fetch video metadata
-        logger.info(f"Fetching metadata for video ID: {videoid}")
         results = VideosSearch(videoid, limit=1)
         result = await results.next()
         if not result or not result.get("result"):
-            logger.error(f"No metadata found for video ID: {videoid}")
+            logger.critical(f"No metadata found for video ID: {videoid}")
             return YOUTUBE_IMG_URL
 
         video = result["result"][0]
@@ -61,14 +58,12 @@ async def get_thumb(videoid, title_max_length=30):
         thumbnail_url = video.get("thumbnails", [{}])[0].get("url", "")
         views = video.get("viewCount", {}).get("text", "Unknown")
         channel = video.get("channel", {}).get("name", "Unknown Channel")
-        logger.info(f"Metadata retrieved: title={title}, duration={duration}, channel={channel}")
 
         if not thumbnail_url:
-            logger.error(f"No thumbnail URL found for video ID: {videoid}")
+            logger.critical(f"No thumbnail URL found for video ID: {videoid}")
             return YOUTUBE_IMG_URL
 
         # Download thumbnail
-        logger.info(f"Downloading thumbnail from: {thumbnail_url}")
         async with aiohttp.ClientSession() as session:
             for attempt in range(3):
                 try:
@@ -76,29 +71,26 @@ async def get_thumb(videoid, title_max_length=30):
                         if resp.status == 200:
                             async with aiofiles.open(f"cache/thumb{videoid}.png", mode="wb") as f:
                                 await f.write(await resp.read())
-                            logger.info(f"Thumbnail downloaded for video ID: {videoid}")
                             break
                         if attempt == 2:
-                            logger.error(f"Failed to download thumbnail after 3 attempts for video ID: {videoid}")
+                            logger.critical(f"Failed to download thumbnail after 3 attempts for video ID: {videoid}")
                             return YOUTUBE_IMG_URL
                 except Exception as e:
                     if attempt == 2:
-                        logger.error(f"Error downloading thumbnail for video ID {videoid}: {str(e)}")
+                        logger.critical(f"Error downloading thumbnail for video ID {videoid}: {str(e)}")
                         return YOUTUBE_IMG_URL
 
         # Process base image
         try:
             base_image = Image.open(f"cache/thumb{videoid}.png")
-            logger.info(f"Thumbnail image opened for video ID: {videoid}")
         except Exception as e:
-            logger.error(f"Error opening thumbnail for video ID {videoid}: {str(e)}")
+            logger.critical(f"Error opening thumbnail for video ID {videoid}: {str(e)}")
             return YOUTUBE_IMG_URL
 
         resized_image = resize_image(1280, 720, base_image)
         rgba_image = resized_image.convert("RGBA")
         background = rgba_image.filter(ImageFilter.BoxBlur(10))
         background = ImageEnhance.Brightness(background).enhance(0.7)
-        logger.info(f"Image processed: resized and blurred for video ID: {videoid}")
 
         # Create square thumbnail with rounded corners
         thumb_size = 450
@@ -117,7 +109,6 @@ async def get_thumb(videoid, title_max_length=30):
         logo_pos_x = rgba_image.width - thumb_size - thumb_gap
         logo_pos_y = (rgba_image.height - thumb_size) // 2
         background.paste(logo, (logo_pos_x, logo_pos_y), logo)
-        logger.info(f"Thumbnail logo prepared and pasted for video ID: {videoid}")
 
         # Load fonts
         draw = ImageDraw.Draw(background)
@@ -126,20 +117,18 @@ async def get_thumb(videoid, title_max_length=30):
             now_playing_font = ImageFont.truetype("AnonXMusic/assets/font3.ttf", 45)  # Now Playing
             info_font = ImageFont.truetype("AnonXMusic/assets/font2.ttf", 30)  # Smaller views, duration, channel
             name_font = ImageFont.truetype("AnonXMusic/assets/font4.ttf", 28)  # App name
-            logger.info(f"Fonts loaded successfully for video ID: {videoid}")
         except IOError as e:
-            logger.error(f"Error loading fonts for video ID {videoid}: {str(e)}")
+            logger.critical(f"Error loading fonts for video ID {videoid}: {str(e)}")
             title_font = now_playing_font = info_font = name_font = ImageFont.load_default()
 
         # Prepare text
         padding = 17
-        box_gap = 11
+        box_gap = 10
         max_box_width = logo_pos_x - thumb_gap - 100
         title = truncate_text(title, title_max_length)
         views = truncate_text(views, 20)
         duration = truncate_text(duration, 15)
         channel = truncate_text(channel, 15)
-        logger.info(f"Text prepared: title={title}, views={views}, duration={duration}, channel={channel}")
 
         # Wrap title and prepare text lines
         para = textwrap.wrap(title, width=25)
@@ -160,22 +149,21 @@ async def get_thumb(videoid, title_max_length=30):
                 label = line.split(":")[0] + ":"
                 label_bbox = draw.textbbox((0, 0), label, font=info_font)
                 max_label_width = max(max_label_width, label_bbox[2] - label_bbox[0])
-        logger.info(f"Text sizes calculated: heights={text_heights}, widths={text_widths}, max_label_width={max_label_width}")
 
-        # Calculate box dimensions (10% smaller)
-        scale_factor = 0.9
-        now_playing_width = int((text_widths[0] + 2 * padding + 30) * scale_factor)
-        now_playing_height = int((text_heights[0] + 2 * padding) * scale_factor)
-        radius = 14
-        total_text_width = int((max(text_widths[1:]) + 2 * padding) * scale_factor)
-        main_box_height = int((sum(text_heights[1:]) + (len(text_lines[1:]) - 1) * box_gap + 2 * padding) * scale_factor)
+        # Calculate box dimensions
+        scale_factor_now_playing = 0.9  # Unchanged for "Now Playing" box
+        scale_factor_main = 0.85  # Slightly reduced for main box width
+        height_scale_factor = 1.05  # Slightly increase main box height (5% taller)
+        now_playing_width = int((text_widths[0] + 2 * padding + 35) * scale_factor_now_playing)
+        now_playing_height = int((text_heights[0] + 2 * padding) * scale_factor_now_playing)
+        radius = 15
+        total_text_width = int((max(text_widths[1:]) + 2 * padding) * scale_factor_main)
+        main_box_height = int((sum(text_heights[1:]) + (len(text_lines[1:]) - 1) * box_gap + 2 * padding) * scale_factor_main * height_scale_factor)
         main_box_width = int(max(now_playing_width - 10, total_text_width))
-        logger.info(f"Box dimensions: now_playing={now_playing_width}x{now_playing_height}, main={main_box_width}x{main_box_height}")
 
         # Center boxes
         start_x = (rgba_image.width - max(now_playing_width, main_box_width) - thumb_size - thumb_gap) // 2
         start_y = (rgba_image.height - (now_playing_height + main_box_height + box_gap)) // 2
-        logger.info(f"Box positions: start_x={start_x}, start_y={start_y}")
 
         # Draw "Now Playing" box
         now_playing_box = Image.new("RGBA", (now_playing_width, now_playing_height), (0, 0, 0, 0))
@@ -184,7 +172,6 @@ async def get_thumb(videoid, title_max_length=30):
         )
         now_playing_box = now_playing_box.filter(ImageFilter.GaussianBlur(2))
         background.paste(now_playing_box, (start_x, start_y), now_playing_box)
-        logger.info(f"Pasted Now Playing box for video ID: {videoid}")
 
         # Draw main text box
         main_box = Image.new("RGBA", (main_box_width, main_box_height), (0, 0, 0, 0))
@@ -194,14 +181,13 @@ async def get_thumb(videoid, title_max_length=30):
         main_box = main_box.filter(ImageFilter.GaussianBlur(1))
         main_y = start_y + now_playing_height + box_gap
         background.paste(main_box, (start_x + (now_playing_width - main_box_width) // 2, main_y), main_box)
-        logger.info(f"Pasted main text box for video ID: {videoid}")
 
         # Draw text
         current_y = start_y + (now_playing_height - text_heights[0]) // 2
         draw.text(
             (start_x + (now_playing_width - text_widths[0]) // 2, current_y),
             "Now Playing",
-            fill="black",
+            fill="white",
             stroke_width=1,
             stroke_fill="white",
             font=now_playing_font
@@ -209,7 +195,7 @@ async def get_thumb(videoid, title_max_length=30):
         current_y = main_y + padding
         for i, line in enumerate(text_lines[1:], 1):
             font = title_font if i in [1, 2] else info_font
-            text_width = text_widths[i]
+            text_width = min(text_widths[i], main_box_width - 2 * padding)  # Ensure text width doesn't exceed box
             if i >= 3:  # Align Views, Duration, Channel
                 label, value = line.split(":", 1)
                 label_x = start_x + (now_playing_width - main_box_width) // 2 + padding
@@ -236,28 +222,24 @@ async def get_thumb(videoid, title_max_length=30):
                     line,
                     fill="white",
                     stroke_width=1,
-                    stroke_fill="white",
+                    stroke_fill="black",
                     font=font
                 )
             current_y += text_heights[i] + box_gap
-        logger.info(f"Text drawn for video ID: {videoid}")
 
         # Draw app name
         draw.text((5, 5), f"{app.name}", fill="white", font=name_font)
-        logger.info(f"App name drawn for video ID: {videoid}")
 
         # Clean up and save
         try:
             os.remove(f"cache/thumb{videoid}.png")
-            logger.info(f"Cleaned up temporary thumbnail file for video ID: {videoid}")
         except:
-            logger.warning(f"Failed to clean up temporary thumbnail file for video ID: {videoid}")
+            pass
         background.save(cache_path)
-        logger.info(f"Thumbnail saved to: {cache_path}")
         return cache_path
 
     except Exception as e:
-        logger.error(f"Error in get_thumb for video ID {videoid}: {str(e)}")
+        logger.critical(f"Error in get_thumb for video ID {videoid}: {str(e)}")
         if "WebpageMediaEmpty" in str(e):
-            logger.error(f"WebpageMediaEmpty: No valid media for video ID {videoid}")
+            logger.critical(f"WebpageMediaEmpty: No valid media for video ID {videoid}")
         return YOUTUBE_IMG_URL
