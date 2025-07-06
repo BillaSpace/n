@@ -150,15 +150,13 @@ async def get_thumb(videoid, title_max_length=30):
                 label_bbox = draw.textbbox((0, 0), label, font=info_font)
                 max_label_width = max(max_label_width, label_bbox[2] - label_bbox[0])
 
-        # Calculate box dimensions
-        scale_factor_now_playing = 0.9  # Unchanged for "Now Playing" box
-        scale_factor_main = 0.85  # Slightly reduced for main box width
-        height_scale_factor = 1.05  # Slightly increase main box height (5% taller)
-        now_playing_width = int((text_widths[0] + 2 * padding + 35) * scale_factor_now_playing)
-        now_playing_height = int((text_heights[0] + 2 * padding) * scale_factor_now_playing)
-        radius = 15
-        total_text_width = int((max(text_widths[1:]) + 2 * padding) * scale_factor_main)
-        main_box_height = int((sum(text_heights[1:]) + (len(text_lines[1:]) - 1) * box_gap + 2 * padding) * scale_factor_main * height_scale_factor)
+        # Calculate box dimensions (10% smaller)
+        scale_factor = 0.9
+        now_playing_width = int((text_widths[0] + 2 * padding + 35) * scale_factor)  # Increased from +30 to +50
+        now_playing_height = int((text_heights[0] + 2 * padding) * scale_factor)
+        radius = 14
+        total_text_width = int((max(text_widths[1:]) + 2 * padding + 3) * scale_factor)  # Added +20 for wider main box
+        main_box_height = int((sum(text_heights[1:]) + (len(text_lines[1:]) - 1) * box_gap + 2 * padding + 3) * scale_factor)  # Added +20 for taller main box
         main_box_width = int(max(now_playing_width - 10, total_text_width))
 
         # Center boxes
@@ -195,7 +193,7 @@ async def get_thumb(videoid, title_max_length=30):
         current_y = main_y + padding
         for i, line in enumerate(text_lines[1:], 1):
             font = title_font if i in [1, 2] else info_font
-            text_width = min(text_widths[i], main_box_width - 2 * padding)  # Ensure text width doesn't exceed box
+            text_width = text_widths[i]
             if i >= 3:  # Align Views, Duration, Channel
                 label, value = line.split(":", 1)
                 label_x = start_x + (now_playing_width - main_box_width) // 2 + padding
@@ -213,7 +211,7 @@ async def get_thumb(videoid, title_max_length=30):
                     value.strip(),
                     fill="white",
                     stroke_width=1,
-                    stroke_fill="white",
+                    stroke_fill="black",
                     font=font
                 )
             else:  # Title text
@@ -222,7 +220,7 @@ async def get_thumb(videoid, title_max_length=30):
                     line,
                     fill="white",
                     stroke_width=1,
-                    stroke_fill="black",
+                    stroke_fill="white",
                     font=font
                 )
             current_y += text_heights[i] + box_gap
