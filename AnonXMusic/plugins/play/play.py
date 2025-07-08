@@ -110,7 +110,7 @@ async def play_commnd(
                 return await mystic.edit_text(err)
             return await mystic.delete()
         return
-    elif video_telegram:
+        elif video_telegram:
         if message.reply_to_message.document:
             try:
                 ext = video_telegram.file_name.split(".")[-1]
@@ -184,7 +184,7 @@ async def play_commnd(
                     details["title"],
                     details["duration_min"],
                 )
-        elif await Spotify.valid(url):
+        elif Spotify.valid(url):
             spotify = True
             if not config.SPOTIFY_CLIENT_ID and not config.SPOTIFY_CLIENT_SECRET:
                 return await mystic.edit_text(
@@ -227,7 +227,7 @@ async def play_commnd(
                 cap = _["play_11"].format("Spotify", message.from_user.first_name)
             else:
                 return await mystic.edit_text(_["play_15"])
-        elif await Apple.valid(url):
+        elif Apple.valid(url):  # Fixed: Removed 'await' as Apple.valid is synchronous
             if "album" in url:
                 try:
                     details, track_id = await Apple.track(url)
@@ -248,7 +248,7 @@ async def play_commnd(
                 img = url
             else:
                 return await mystic.edit_text(_["play_3"])
-        elif await Resso.valid(url):
+        elif Resso.valid(url):
             try:
                 details, track_id = await Resso.track(url)
             except:
@@ -256,7 +256,7 @@ async def play_commnd(
             streamtype = "youtube"
             img = details["thumb"]
             cap = _["play_10"].format(details["title"], details["duration_min"])
-        elif await SoundCloud.valid(url):
+        elif SoundCloud.valid(url):
             try:
                 details, track_path = await SoundCloud.download(url)
             except:
@@ -316,7 +316,7 @@ async def play_commnd(
                 err = e if ex_type == "AssistantErr" else _["general_2"].format(ex_type)
                 return await mystic.edit_text(err)
             return await play_logs(message, streamtype="M3u8 or Index Link")
-    else:
+            else:
         if len(message.command) < 2:
             buttons = botplaylist_markup(_)
             return await mystic.edit_text(
