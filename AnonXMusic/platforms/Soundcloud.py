@@ -1,3 +1,9 @@
+           "filepath": file_path,
+            "thumbnail": info.get("thumbnail"),  # Optional
+        }
+        return track_details, file_path           "filepath": xyz,
+        }
+        return track_details, xyz
 from os import path
 from yt_dlp import YoutubeDL
 from AnonXMusic.utils.formatters import seconds_to_min
@@ -6,18 +12,27 @@ from AnonXMusic.utils.formatters import seconds_to_min
 class SoundAPI:
     def __init__(self):
         self.opts = {
-            "outtmpl": "downloads/%(id)s.%(ext)s",
-            "format": "bestaudio/best",
-            "retries": 3,
-            "nooverwrites": False,
-            "continuedl": True,
-            "quiet": True,
+            "outtmpl": "downloads/%(id)s.%(ext)s",       # Output path format
+            "format": "bestaudio/best",                  # Best audio quality
+            "retries": 3,                                # Retry count
+            "nooverwrites": False,                       # Avoid overwriting files
+            "continuedl": True,                          # Resume partial downloads
+            "quiet": True,                               # Suppress verbose logging
         }
 
     async def valid(self, link: str) -> bool:
+        """
+        Validate whether the provided link is a SoundCloud link.
+        """
         return "soundcloud.com" in link
 
     async def download(self, url: str):
+        """
+        Download a SoundCloud track using yt_dlp and return metadata.
+        
+        :param url: SoundCloud track URL
+        :return: Tuple of (track_details dict, file path) or False on failure
+        """
         d = YoutubeDL(self.opts)
         try:
             info = d.extract_info(url, download=True)
@@ -35,8 +50,7 @@ class SoundAPI:
             "duration_min": duration_min,
             "uploader": info.get("uploader", "Unknown Uploader"),
             "filepath": file_path,
-            "thumbnail": info.get("thumbnail"),  # Optional
+            "thumbnail": info.get("thumbnail"),  # Optional field
         }
-        return track_details, file_path           "filepath": xyz,
-        }
-        return track_details, xyz
+
+        return track_details, file_path
