@@ -21,19 +21,16 @@ class SpotifyAPI:
         return bool(re.match(self.regex, link))
 
     async def get_track_info(self, link: str) -> dict:
-        """Async helper function to fetch Spotify track and convert to YouTube"""
+        """Fetch Spotify track and convert to YouTube"""
         if not self.spotify:
             raise Exception("Spotify client not initialized.")
 
-        # Spotify call in background thread
         track = await asyncio.to_thread(self.spotify.track, link)
 
-        # Build search query
         query = track["name"] + "".join(
             f" {a['name']}" for a in track["artists"] if a["name"] != "Various Artists"
         )
 
-        # YouTube Search
         results = VideosSearch(query, limit=1)
         data = await results.next()
         result = data["result"][0]
@@ -47,10 +44,6 @@ class SpotifyAPI:
         }
 
     async def track(self, link: str):
-        """
-        Main async method for external calls
-        Returns (track_details_dict, video_id)
-        """
         track_info = await self.get_track_info(link)
         return track_info, track_info["vidid"]
 
@@ -58,18 +51,23 @@ class SpotifyAPI:
         if not self.spotify:
             raise Exception("Spotify client not initialized.")
 
-        playlist_id = url.split("/")[-1].split("?")[0]
+        playlist = await asyncio.to_thread(self.spotify.playlist, url)
+        playlist_id = playlist["id"]
 
-        results = await asyncio.to_thread(self.spotify.playlist_items, playlist_id)
-        tracks = results["items"]
+        results = playlist["tracks"]["items"]
+        next_page = playlist["tracks"]["next"]
 
-        while results.get("next"):
-            results = await asyncio.to_thread(self.spotify.next, results)
-            tracks.extend(results["items"])
+        while next_page:
+            next_tracks = await asyncio.to_thread(self.spotify.next, playlist["tracks"])
+            results.extend(next_tracks["items"])
+            playlist["tracks"] = next_tracks
+            next_page = next_tracks.get("next")
 
         titles = []
-        for item in tracks:
-            track = item["track"]
+        for item in results:
+            track = item.get("track")
+            if not track:
+                continue
             name = track["name"]
             artists = " ".join(
                 a["name"] for a in track["artists"] if a["name"] != "Various Artists"
@@ -82,17 +80,20 @@ class SpotifyAPI:
         if not self.spotify:
             raise Exception("Spotify client not initialized.")
 
-        album_id = url.split("/")[-1].split("?")[0]
+        album = await asyncio.to_thread(self.spotify.album, url)
+        album_id = album["id"]
 
-        results = await asyncio.to_thread(self.spotify.album_tracks, album_id)
-        tracks = results["items"]
+        results = album["tracks"]["items"]
+        next_page = album["tracks"].get("next")
 
-        while results.get("next"):
-            results = await asyncio.to_thread(self.spotify.next, results)
-            tracks.extend(results["items"])
+        while next_page:
+            next_tracks = await asyncio.to_thread(self.spotify.next, album["tracks"])
+            results.extend(next_tracks["items"])
+            album["tracks"] = next_tracks
+            next_page = next_tracks.get("next")
 
         titles = []
-        for item in tracks:
+        for item in results:
             name = item["name"]
             artists = " ".join(
                 a["name"] for a in item["artists"] if a["name"] != "Various Artists"
@@ -105,7 +106,8 @@ class SpotifyAPI:
         if not self.spotify:
             raise Exception("Spotify client not initialized.")
 
-        artist_id = url.split("/")[-1].split("?")[0]
+        artist = await asyncio.to_thread(self.spotify.artist, url)
+        artist_id = artist["id"]
 
         top_tracks_data = await asyncio.to_thread(
             self.spotify.artist_top_tracks, artist_id
