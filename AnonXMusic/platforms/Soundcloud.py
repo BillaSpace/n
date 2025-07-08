@@ -1,9 +1,3 @@
-           "filepath": file_path,
-            "thumbnail": info.get("thumbnail"),  # Optional
-        }
-        return track_details, file_path           "filepath": xyz,
-        }
-        return track_details, xyz
 from os import path
 from yt_dlp import YoutubeDL
 from AnonXMusic.utils.formatters import seconds_to_min
@@ -12,27 +6,20 @@ from AnonXMusic.utils.formatters import seconds_to_min
 class SoundAPI:
     def __init__(self):
         self.opts = {
-            "outtmpl": "downloads/%(id)s.%(ext)s",       # Output path format
-            "format": "bestaudio/best",                  # Best audio quality
-            "retries": 3,                                # Retry count
-            "nooverwrites": False,                       # Avoid overwriting files
-            "continuedl": True,                          # Resume partial downloads
-            "quiet": True,                               # Suppress verbose logging
+            "outtmpl": "downloads/%(id)s.%(ext)s",
+            "format": "bestaudio/best",
+            "retries": 3,
+            "nooverwrites": False,
+            "continuedl": True,
+            "quiet": True,
         }
 
-    async def valid(self, link: str) -> bool:
-        """
-        Validate whether the provided link is a SoundCloud link.
-        """
-        return "soundcloud.com" in link
+    async def valid(self, link: str):
+        if "soundcloud.com" in link:
+            return True
+        return False
 
-    async def download(self, url: str):
-        """
-        Download a SoundCloud track using yt_dlp and return metadata.
-        
-        :param url: SoundCloud track URL
-        :return: Tuple of (track_details dict, file path) or False on failure
-        """
+    async def download(self, url):
         d = YoutubeDL(self.opts)
         try:
             info = d.extract_info(url, download=True)
@@ -40,17 +27,15 @@ class SoundAPI:
             print(f"Download failed: {e}")
             return False
 
-        file_path = path.join("downloads", f"{info.get('id')}.{info.get('ext')}")
-        duration_sec = info.get("duration", 0)
-        duration_min = seconds_to_min(duration_sec)
+        xyz = path.join("downloads", f"{info['id']}.{info['ext']}")
+        duration_min = seconds_to_min(info["duration"])
 
         track_details = {
-            "title": info.get("title", "Unknown Title"),
-            "duration_sec": duration_sec,
+            "title": info["title"],
+            "duration_sec": info["duration"],
             "duration_min": duration_min,
-            "uploader": info.get("uploader", "Unknown Uploader"),
-            "filepath": file_path,
-            "thumbnail": info.get("thumbnail"),  # Optional field
+            "uploader": info["uploader"],
+            "filepath": xyz,
         }
 
-        return track_details, file_path
+        return track_details, xyz
