@@ -1,5 +1,6 @@
 import re
-from typing import Union
+import json
+from typing import Union, List, Dict
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -8,64 +9,79 @@ from youtubesearchpython.__future__ import VideosSearch
 
 class AppleAPI:
     def __init__(self):
-        self.regex = r"^(https:\/\/music.apple.com\/)(.*)$"
-        self.base = "https://music.apple.com/in/playlist/"
+        self.regex = r"^https:\/\/music\.apple\.com\/"
 
-    async def valid(self, link: str):
-        if re.search(self.regex, link):
-            return True
-        else:
-            return False
+    def valid(self, link: str) -> bool:
+        return bool(re.match(self.regex, link))
 
-    async def track(self, url, playid: Union[bool, str] = None):
-        if playid:
-            url = self.base + url
+    async def fetch_html(self, url: str) -> Union[str, None]:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    return False
-                html = await response.text()
-        soup = BeautifulSoup(html, "html.parser")
-        search = None
-        for tag in soup.find_all("meta"):
-            if tag.get("property", None) == "og:title":
-                search = tag.get("content", None)
-        if search is None:
-            return False
-        results = VideosSearch(search, limit=1)
-        for result in (await results.next())["result"]:
-            title = result["title"]
-            ytlink = result["link"]
-            vidid = result["id"]
-            duration_min = result["duration"]
-            thumbnail = result["thumbnails"][0]["url"].split("?")[0]
-        track_details = {
-            "title": title,
-            "link": ytlink,
-            "vidid": vidid,
-            "duration_min": duration_min,
-            "thumb": thumbnail,
+            async with session.get(url) as r:
+                if r.status != 200:
+                    return None
+                return await r.text()
+
+    def map_yt_result(self, v: dict) -> dict:
+        return {
+            "title": v["title"],
+            "link": v["link"],
+            "id": v["id"],
+            "duration": v["duration"],
+            "thumb": v["thumbnails"][0]["url"].split("?")[0],
         }
-        return track_details, vidid
 
-    async def playlist(self, url, playid: Union[bool, str] = None):
-        if playid:
-            url = self.base + url
-        playlist_id = url.split("playlist/")[1]
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    return False
-                html = await response.text()
+    async def track(self, url: str) -> Union[Dict, None]:
+        html = await self.fetch_html(url)
+        if not html:
+            return None
+
         soup = BeautifulSoup(html, "html.parser")
-        applelinks = soup.find_all("meta", attrs={"property": "music:song"})
-        results = []
-        for item in applelinks:
+        title_tag = soup.find("title")
+        if not title_tag:
+            return None
+
+        parts = title_tag.text.split(" - ")
+        query = " ".join(parts[:2]).strip()
+
+        results = VideosSearch(query, limit=1)
+        r = await results.next()
+        if not r["result"]:
+            return None
+
+        return self.map_yt_result(r["result"][0])
+
+    def extract_playlist(self, html: str) -> List[str]:
+        soup = BeautifulSoup(html, "html.parser")
+        queries = []
+
+        for script in soup.find_all("script", {"type": "application/ld+json"}):
             try:
-                xx = (((item["content"]).split("album/")[1]).split("/")[0]).replace(
-                    "-", " "
-                )
-            except:
-                xx = ((item["content"]).split("album/")[1]).split("/")[0]
-            results.append(xx)
-        return results, playlist_id
+                data = json.loads(script.string)
+                if "track" in data:
+                    for track in data["track"]:
+                        name = track.get("name")
+                        artist = track.get("byArtist", {}).get("name")
+                        if name and artist:
+                            queries.append(f"{name} {artist}")
+            except Exception:
+                continue
+
+        return queries
+
+    async def playlist(self, url: str) -> Union[List[dict], None]:
+        html = await self.fetch_html(url)
+        if not html:
+            return None
+
+        queries = self.extract_playlist(html)
+        if not queries:
+            return []
+
+        results = []
+        for query in queries:
+            search = VideosSearch(query, limit=1)
+            r = await search.next()
+            if r["result"]:
+                results.append(self.map_yt_result(r["result"][0]))
+
+        return results
