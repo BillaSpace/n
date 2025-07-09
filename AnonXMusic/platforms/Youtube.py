@@ -59,32 +59,32 @@ def api_dl(video_id: str, mode: str = "audio") -> str:
     # Try API_URL1
     if API_URL1:
         try:
-            # Try both URL formats to handle API variability
-            for base_url in [f"https://youtu.be/{video_id}", f"https://www.youtube.com/watch?v={video_id}"]:
-                api_url1 = f"{API_URL1.format(video_id=video_id)}&downloadMode={mode}"
-                logger.info(f"Trying API_URL1: {api_url1}")
-                response = requests.get(api_url1, stream=True)
-                if response.status_code == 200:
-                    try:
-                        data = response.json()
-                        if data.get("successful") == "success" and "url" in data.get("data", {}):
-                            download_url = data["data"]["url"]
-                            os.makedirs("downloads", exist_ok=True)
-                            with requests.get(download_url, stream=True) as dl_response:
-                                if dl_response.status_code == 200:
-                                    with open(file_path, 'wb') as f:
-                                        for chunk in dl_response.iter_content(chunk_size=8192):
-                                            f.write(chunk)
-                                    logger.info(f"Downloaded {file_path} via API_URL1")
-                                    return file_path
-                                else:
-                                    logger.error(f"Failed to download from API_URL1 URL: {download_url}. Status: {dl_response.status_code}")
-                        else:
-                            logger.error(f"API_URL1 invalid response for {video_id}: {data}")
-                    except ValueError as e:
-                        logger.error(f"API_URL1 JSON decode error for {video_id}: {e}, Response: {response.text}")
-                else:
-                    logger.error(f"API_URL1 request failed for {video_id}. Status: {response.status_code}, Response: {response.text}")
+            # Construct YouTube URL using video_id
+            youtube_url = f"https://www.youtube.com/watch?v={video_id}"
+            api_url1 = f"{API_URL1}{youtube_url}&downloadMode={mode}"
+            logger.info(f"Trying API_URL1: {api_url1}")
+            response = requests.get(api_url1, stream=True)
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    if data.get("successful") == "success" and "url" in data.get("data", {}):
+                        download_url = data["data"]["url"]
+                        os.makedirs("downloads", exist_ok=True)
+                        with requests.get(download_url, stream=True) as dl_response:
+                            if dl_response.status_code == 200:
+                                with open(file_path, 'wb') as f:
+                                    for chunk in dl_response.iter_content(chunk_size=8192):
+                                        f.write(chunk)
+                                logger.info(f"Downloaded {file_path} via API_URL1")
+                                return file_path
+                            else:
+                                logger.error(f"Failed to download from API_URL1 URL: {download_url}. Status: {dl_response.status_code}")
+                    else:
+                        logger.error(f"API_URL1 invalid response for {video_id}: {data}")
+                except ValueError as e:
+                    logger.error(f"API_URL1 JSON decode error for {video_id}: {e}, Response: {response.text}")
+            else:
+                logger.error(f"API_URL1 request failed for {video_id}. Status: {response.status_code}, Response: {response.text}")
         except requests.RequestException as e:
             logger.error(f"Error with API_URL1 for {video_id}: {e}")
     else:
@@ -114,6 +114,7 @@ def api_dl(video_id: str, mode: str = "audio") -> str:
     # Both APIs failed or were not set
     logger.error(f"All APIs failed for {video_id}.")
     return None
+
 
 def cookie_txt_file():
     folder_path = f"{os.getcwd()}/cookies"
