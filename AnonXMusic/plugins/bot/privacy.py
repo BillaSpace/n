@@ -5,11 +5,11 @@ from AnonXMusic import app
 import config
 
 TEXT = f"""
-🔒 **Privacy Policy for Bot Hub Bot's !**
+🔒 **Privacy Policy for Billa & Space X Bot's !**
 
 Your privacy is important to us. To learn more about how we collect, use, and protect your data, please review our Privacy Policy here: [Privacy Policy](https://telegra.ph/Privacy-Policy-Bot-Hub-12-18-2).
 
-If you have any questions or concerns, feel free to reach out to our [support team](https://t.me/alice_x_support).
+If you have any questions or concerns, feel free to reach out to our [support team](https://t.me/BillaCore).
 """
 
 @app.on_message(filters.command("privacy"))
