@@ -16,7 +16,11 @@ import glob
 import random
 import logging
 import requests
-from config import API_URL1, API_URL2  # Import both API_URL1 and API_URL2
+from config import API_URL1, API_URL2
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def extract_video_id(link: str) -> str:
     """
@@ -24,11 +28,11 @@ def extract_video_id(link: str) -> str:
     Supports full, shortened, playlist, and YouTube Music URLs.
     """
     patterns = [
-        r'youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=)([0-9A-Za-z_-]{11})',  # youtube.com/watch?v= or youtube.com/embed/
-        r'youtu\.be\/([0-9A-Za-z_-]{11})',  # youtu.be/short link
-        r'youtube\.com\/(?:playlist\?list=[^&]+&v=|v\/)([0-9A-Za-z_-]{11})',  # youtube.com/playlist?list= and youtube.com/v/
-        r'youtube\.com\/(?:.*\?v=|.*\/)([0-9A-Za-z_-]{11})',  # youtube.com/watch?v= with additional query parameters
-        r'music\.youtube\.com\/watch\?v=([0-9A-Za-z_-]{11})',  # music.youtube.com/watch?v=
+        r'youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=)([0-9A-Za-z_-]{11})',
+        r'youtu\.be\/([0-9A-Za-z_-]{11})',
+        r'youtube\.com\/(?:playlist\?list=[^&]+&v=|v\/)([0-9A-Za-z_-]{11})',
+        r'youtube\.com\/(?:.*\?v=|.*\/)([0-9A-Za-z_-]{11})',
+        r'music\.youtube\.com\/watch\?v=([0-9A-Za-z_-]{11})',
     ]
 
     for pattern in patterns:
@@ -49,57 +53,66 @@ def api_dl(video_id: str, mode: str = "audio") -> str:
 
     # Check if file already exists
     if os.path.exists(file_path):
-        print(f"{file_path} already exists. Skipping download.")
+        logger.info(f"{file_path} already exists. Skipping download.")
         return file_path
 
-    # Try API_URL1 with standardized YouTube URL
-    try:
-        standardized_url = f"https://youtu.be/{video_id}"
-        api_url1 = f"{API_URL1.format(video_id=video_id)}&downloadMode={mode}"
-        response = requests.get(api_url1, stream=True)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("successful") == "success" and "url" in data.get("data", {}):
-                download_url = data["data"]["url"]
-                os.makedirs("downloads", exist_ok=True)
-                with requests.get(download_url, stream=True) as dl_response:
-                    if dl_response.status_code == 200:
-                        with open(file_path, 'wb') as f:
-                            for chunk in dl_response.iter_content(chunk_size=8192):
-                                f.write(chunk)
-                        print(f"Downloaded {file_path} via API_URL1")
-                        return file_path
-                    else:
-                        print(f"Failed to download from API_URL1 download URL: {download_url}. Status: {dl_response.status_code}")
-            else:
-                print(f"API_URL1 failed for {video_id}. Response: {data}")
-        else:
-            print(f"API_URL1 request failed for {video_id}. Status: {response.status_code}")
-    except requests.RequestException as e:
-        print(f"Error with API_URL1 for {video_id}: {e}")
+    # Try API_URL1
+    if API_URL1:
+        try:
+            # Try both URL formats to handle API variability
+            for base_url in [f"https://youtu.be/{video_id}", f"https://www.youtube.com/watch?v={video_id}"]:
+                api_url1 = f"{API_URL1.format(video_id=video_id)}&downloadMode={mode}"
+                logger.info(f"Trying API_URL1: {api_url1}")
+                response = requests.get(api_url1, stream=True)
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        if data.get("successful") == "success" and "url" in data.get("data", {}):
+                            download_url = data["data"]["url"]
+                            os.makedirs("downloads", exist_ok=True)
+                            with requests.get(download_url, stream=True) as dl_response:
+                                if dl_response.status_code == 200:
+                                    with open(file_path, 'wb') as f:
+                                        for chunk in dl_response.iter_content(chunk_size=8192):
+                                            f.write(chunk)
+                                    logger.info(f"Downloaded {file_path} via API_URL1")
+                                    return file_path
+                                else:
+                                    logger.error(f"Failed to download from API_URL1 URL: {download_url}. Status: {dl_response.status_code}")
+                        else:
+                            logger.error(f"API_URL1 invalid response for {video_id}: {data}")
+                    except ValueError as e:
+                        logger.error(f"API_URL1 JSON decode error for {video_id}: {e}, Response: {response.text}")
+                else:
+                    logger.error(f"API_URL1 request failed for {video_id}. Status: {response.status_code}, Response: {response.text}")
+        except requests.RequestException as e:
+            logger.error(f"Error with API_URL1 for {video_id}: {e}")
+    else:
+        logger.warning("API_URL1 is not set. Skipping to API_URL2.")
 
     # Fallback to API_URL2 for audio only
-    if mode == "audio":
+    if mode == "audio" and API_URL2:
         try:
             api_url2 = f"{API_URL2}?direct&id={video_id}"
+            logger.info(f"Trying API_URL2: {api_url2}")
             response = requests.get(api_url2, stream=True)
             if response.status_code == 200:
                 os.makedirs("downloads", exist_ok=True)
                 with open(file_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
-                print(f"Downloaded {file_path} via API_URL2")
+                logger.info(f"Downloaded {file_path} via API_URL2")
                 return file_path
             else:
-                print(f"API_URL2 failed for {video_id}. Status: {response.status_code}")
+                logger.error(f"API_URL2 failed for {video_id}. Status: {response.status_code}, Response: {response.text}")
         except requests.RequestException as e:
-            print(f"Error with API_URL2 for {video_id}: {e}")
+            logger.error(f"Error with API_URL2 for {video_id}: {e}")
             # Cleanup if download fails
             if os.path.exists(file_path):
                 os.remove(file_path)
 
-    # Both APIs failed
-    print(f"All APIs failed for {video_id}.")
+    # Both APIs failed or were not set
+    logger.error(f"All APIs failed for {video_id}.")
     return None
 
 def cookie_txt_file():
