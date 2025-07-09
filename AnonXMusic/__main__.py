@@ -21,7 +21,7 @@ async def init():
         and not config.STRING4
         and not config.STRING5
     ):
-        LOGGER(__name__).error("Assistant client variables not defined, exiting...")
+        LOGGER(__name__).error("Assistant String Sessions or client variables are not defined, exiting...")
         exit()
 
     await sudo()
@@ -40,14 +40,14 @@ async def init():
 
     for module in ALL_MODULES:
         if not module.strip():
-            LOGGER("AnonXMusic.plugins").warning("Skipping empty module name in ALL_MODULES...")
             continue
         try:
-            importlib.import_module("AnonXMusic.plugins." + module)
+            importlib.import_module(f"AnonXMusic.plugins.{module}")
+            LOGGER("AnonXMusic.plugins").info(f"✅ Loaded module: {module}")
         except Exception as e:
-            LOGGER("AnonXMusic.plugins").error(f"Failed to import module '{module}': {e}")
+            LOGGER("AnonXMusic.plugins").error(f"❌ Failed to import module '{module}': {e}")
 
-    LOGGER("AnonXMusic.plugins").info("Successfully Imported All Modules.")
+    LOGGER("AnonXMusic.plugins").info("✅ Successfully imported all plugin modules.")
 
     await userbot.start()
     await Anony.start()
@@ -56,23 +56,23 @@ async def init():
         await Anony.stream_call("https://te.legra.ph/file/29f784eb49d230ab62e9e.mp4")
     except NoActiveGroupCall:
         LOGGER("AnonXMusic").error(
-            "Please turn on the videochat of your log group/channel.\n\nStopping Bot..."
+            "❌ Please turn on the videochat of your log group/channel.\nStopping Bot..."
         )
         exit()
     except Exception as e:
-        LOGGER("AnonXMusic").warning(f"Stream startup failed: {e}")
+        LOGGER("AnonXMusic").warning(f"⚠️ Stream startup failed: {e}")
 
     await Anony.decorators()
 
     LOGGER("AnonXMusic").info(
-        "AnonX Music Bot Started Successfully.\nDon't forget to visit @FallenAssociation"
+        "✅ AnonX Music Bot Started Successfully.\nVisit @FallenAssociation"
     )
 
     await idle()
     await app.stop()
     await userbot.stop()
 
-    LOGGER("AnonXMusic").info("Stopping AnonX Music Bot...")
+    LOGGER("AnonXMusic").info("👋 Stopping AnonX Music Bot...")
 
 
 if __name__ == "__main__":
@@ -80,8 +80,8 @@ if __name__ == "__main__":
         loop = asyncio.get_event_loop()
         loop.run_until_complete(init())
     except KeyboardInterrupt:
-        print("Bot stopped manually.")
-    except Exception as e:
+        print("🛑 Bot stopped manually.")
+    except Exception:
         import traceback
-        print("Unexpected error occurred:")
+        print("❌ Unexpected error occurred:")
         traceback.print_exc()
