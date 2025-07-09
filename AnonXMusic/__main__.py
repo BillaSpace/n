@@ -3,12 +3,6 @@ import importlib
 
 from pyrogram import idle
 from pytgcalls.exceptions import NoActiveGroupCall
-import asyncio
-import importlib
-
-from pyrogram import idle
-from pytgcalls.exceptions import NoActiveGroupCall
-from pyrogram.errors import FloodWait
 
 import config
 from AnonXMusic import LOGGER, app, userbot
@@ -20,82 +14,65 @@ from config import BANNED_USERS
 
 
 async def init():
-    # Check assistant session strings
-    if not (config.STRING1 or config.STRING2 or config.STRING3 or config.STRING4 or config.STRING5):
+    if (
+        not config.STRING1
+        and not config.STRING2
+        and not config.STRING3
+        and not config.STRING4
+        and not config.STRING5
+    ):
         LOGGER(__name__).error("Assistant client variables not defined, exiting...")
-        return
+        exit()
 
-    # Load sudoers and banned users
     await sudo()
+
     try:
-        for user_id in await get_gbanned():
+        users = await get_gbanned()
+        for user_id in users:
             BANNED_USERS.add(user_id)
-        for user_id in await get_banned_users():
+        users = await get_banned_users()
+        for user_id in users:
             BANNED_USERS.add(user_id)
     except Exception as e:
-        LOGGER(__name__).warning(f"Failed to load banned users: {e}")
+        LOGGER(__name__).warning(f"Error loading banned users: {e}")
 
-    # Start main bot client
-    try:
-        await app.start()
-    except FloodWait as e:
-        LOGGER("AnonXMusic.app").warning(f"FloodWait: sleeping for {e.value} seconds")
-        await asyncio.sleep(e.value)
-        await app.start()
+    await app.start()
 
-    # Load all plugin modules
     for module in ALL_MODULES:
-        importlib.import_module("AnonXMusic.plugins." + module)
-    LOGGER("AnonXMusic.plugins").info("Successfully Imported Modules...")
+        if not module.strip():
+            LOGGER("AnonXMusic.plugins").warning("Skipping empty module name in ALL_MODULES...")
+            continue
+        try:
+            importlib.import_module("AnonXMusic.plugins." + module)
+        except Exception as e:
+            LOGGER("AnonXMusic.plugins").error(f"Failed to import module '{module}': {e}")
 
-    # Start assistant userbot client
-    try:
-        await userbot.start()
-    except FloodWait as e:
-        LOGGER("AnonXMusic.userbot").warning(f"FloodWait: sleeping for {e.value} seconds")
-        await asyncio.sleep(e.value)
-        await userbot.start()
+    LOGGER("AnonXMusic.plugins").info("Successfully Imported All Modules.")
 
-    # Start group call client
-    try:
-        await Anony.start()
-    except FloodWait as e:
-        LOGGER("AnonXMusic.call").warning(f"FloodWait: sleeping for {e.value} seconds")
-        await asyncio.sleep(e.value)
-        await Anony.start()
+    await userbot.start()
+    await Anony.start()
 
-    # Test stream to ensure VC is active
     try:
         await Anony.stream_call("https://te.legra.ph/file/29f784eb49d230ab62e9e.mp4")
     except NoActiveGroupCall:
         LOGGER("AnonXMusic").error(
-            "Please turn on the videochat of your log group/channel.\nStopping Bot..."
+            "Please turn on the videochat of your log group/channel.\n\nStopping Bot..."
         )
-        return
+        exit()
     except Exception as e:
-        LOGGER("AnonXMusic").warning(f"Stream test failed: {e}")
+        LOGGER("AnonXMusic").warning(f"Stream startup failed: {e}")
 
-    # Load decorators
     await Anony.decorators()
 
     LOGGER("AnonXMusic").info(
         "AnonX Music Bot Started Successfully.\nDon't forget to visit @FallenAssociation"
     )
 
-    # Run bot until stopped
-    try:
-        await idle()
-    finally:
-        LOGGER("AnonXMusic").info("Shutting down gracefully...")
-        try:
-            await app.stop()
-        except Exception as e:
-            LOGGER("AnonXMusic").error(f"Error while stopping app: {e}")
-        try:
-            await userbot.stop()
-        except Exception as e:
-            LOGGER("AnonXMusic").error(f"Error while stopping userbot: {e}")
-        LOGGER("AnonXMusic").info("AnonX Music Bot stopped.")
+    await idle()
+    await app.stop()
+    await userbot.stop()
+
+    LOGGER("AnonXMusic").info("Stopping AnonX Music Bot...")
 
 
 if __name__ == "__main__":
