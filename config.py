@@ -24,7 +24,9 @@ LOGGER_ID = int(getenv("LOGGER_ID", -1002030443562))
 # Get this value from @FallenxBot on Telegram by /id
 OWNER_ID = int(getenv("OWNER_ID", 5960968099))
 
-API_URL = getenv("API_URL", None)
+# API URLs for downloading YouTube/YouTube Music content
+API_URL1 = getenv("API_URL1", None)  # Primary API using video_id
+API_URL2 = getenv("API_URL2", None)  # Fallback API for audio using video_id
 
 ## Fill these variables if you're deploying on heroku.
 # Your heroku app name
