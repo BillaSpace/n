@@ -205,7 +205,7 @@ async def play_commnd(
                     details["title"],
                     details["duration_min"],
                 )
-        elif Spotify.valid(url):
+        elif await Spotify.valid(url):
             spotify = True
             if not config.SPOTIFY_CLIENT_ID and not config.SPOTIFY_CLIENT_SECRET:
                 return await edit_message_with_retry(
