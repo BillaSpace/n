@@ -1,7 +1,6 @@
 from pykeyboard import InlineKeyboard
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardButton, Message
-from pyrogram.emoji import SOME_EMOJI
 from AnonXMusic import app
 from AnonXMusic.utils.database import get_lang, set_lang
 from AnonXMusic.utils.decorators import ActualAdminCB, language, languageCB
