@@ -248,7 +248,7 @@ async def play_commnd(
                 img = url
             else:
                 return await mystic.edit_text(_["play_3"])
-        elif Resso.valid(url):
+        elif await Resso.valid(url):
             try:
                 details, track_id = await Resso.track(url)
             except:
