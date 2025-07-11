@@ -9,7 +9,7 @@ from pytgcalls.exceptions import NoActiveGroupCall
 
 import config
 from AnonXMusic import Apple, Resso, SoundCloud, Spotify, Telegram, YouTube, app
-from AnonXMusic.core.call import Anony
+from AnonXMusic.core.call import Anony, group_assitant
 from AnonXMusic.utils import seconds_to_min, time_to_seconds
 from AnonXMusic.utils.channelplay import get_channeplayCB
 from AnonXMusic.utils.decorators.language import languageCB
@@ -328,7 +328,7 @@ async def play_commnd(
         else:
             try:
                 # Check if group call is active
-                call = await Anony.get_group_call(chat_id)
+                call = await group_assistant(Anony, chat_id)
                 if not call:
                     await edit_message_with_retry(mystic, _["black_9"])
                     return await app.send_message(
