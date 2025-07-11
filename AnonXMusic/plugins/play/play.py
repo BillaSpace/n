@@ -256,7 +256,7 @@ async def play_commnd(
             streamtype = "youtube"
             img = details["thumb"]
             cap = _["play_10"].format(details["title"], details["duration_min"])
-        elif SoundCloud.valid(url):
+        elif await SoundCloud.valid(url):
             try:
                 details, track_path = await SoundCloud.download(url)
             except:
