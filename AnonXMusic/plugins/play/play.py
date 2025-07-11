@@ -38,9 +38,21 @@ async def edit_message_with_retry(message, text, retries=3, delay=1):
                 "The bot cannot access the channel. Please add the bot as an admin with 'Edit Messages' and 'Manage Voice Chats' permissions."
             )
             return None
+        except pyrogram.errors.MessageIdInvalid:
+            # Send new message if message ID is invalid
+            return await message._client.send_message(
+                chat_id=message.chat.id,
+                text=text,
+                disable_web_page_preview=True
+            )
         except Exception as e:
             if attempt == retries - 1:
-                raise
+                # Fallback to sending a new message for other errors
+                return await message._client.send_message(
+                    chat_id=message.chat.id,
+                    text=text,
+                    disable_web_page_preview=True
+                )
             await asyncio.sleep(delay)
     return None
 
@@ -72,6 +84,10 @@ async def play_commnd(
     url,
     fplay,
 ):
+    # Validate chat type
+    if message.chat.type not in ["group", "supergroup", "channel"]:
+        return await message.reply_text("This command can only be used in groups or channels.")
+    
     mystic = await message.reply_text(
         _["play_2"].format(channel) if channel else _["play_1"]
     )
@@ -311,6 +327,14 @@ async def play_commnd(
             return await mystic.delete()
         else:
             try:
+                # Check if group call is active
+                call = await Anony.get_group_call(chat_id)
+                if not call:
+                    await edit_message_with_retry(mystic, _["black_9"])
+                    return await app.send_message(
+                        chat_id=config.LOGGER_ID,
+                        text=_["play_17"],
+                    )
                 await Anony.stream_call(url)
             except NoActiveGroupCall:
                 await edit_message_with_retry(mystic, _["black_9"])
@@ -456,7 +480,6 @@ async def play_commnd(
                     reply_markup=InlineKeyboardMarkup(buttons),
                 )
                 return await play_logs(message, streamtype=f"URL Searched Inline")
-
 
 @app.on_callback_query(filters.regex("MusicStream") & ~BANNED_USERS)
 @languageCB
@@ -685,4 +708,4 @@ async def slider_queries(client, CallbackQuery, _):
         )
         return await CallbackQuery.edit_message_media(
             media=med, reply_markup=InlineKeyboardMarkup(buttons)
-        )
+        )                              
