@@ -239,7 +239,7 @@ async def play_commnd(
             elif "playlist" in url:
                 spotify = True
                 try:
-                    details, plist_id = Apple.playlist(url)
+                    details, plist_id = await Apple.playlist(url)
                 except:
                     return await mystic.edit_text(_["play_3"])
                 streamtype = "playlist"
