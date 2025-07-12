@@ -3,23 +3,32 @@ import time
 import asyncio
 import requests
 import yt_dlp
+from collections import defaultdict
 
 from AnonXMusic import app
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.errors import FloodWait
 from youtubesearchpython.__future__ import VideosSearch
 from config import API_URL2, LOGGER_ID as SONG_DUMP_ID
 
 DOWNLOADS_DIR = "downloads"
 COOKIES_PATH = "cookies/cookies.txt"
 MAX_RETRIES = 3
+SPAM_LIMIT = 5
+SPAM_WINDOW = 60  # 60 seconds
+BLOCK_DURATION = 600  # 10 minutes
 
+user_usage = defaultdict(list)
+user_blocked = {}
+
+# Ensure folders
 if not os.path.exists(DOWNLOADS_DIR):
     os.makedirs(DOWNLOADS_DIR)
 if not os.path.exists("cookies"):
     os.makedirs("cookies")
 
-# Custom logger to suppress yt-dlp spam
+# Logger to suppress yt-dlp spam
 class QuietLogger:
     def debug(self, msg): pass
     def warning(self, msg): pass
@@ -45,7 +54,7 @@ def download_thumbnail(url: str, file_path: str):
     return None
 
 async def cleanup_files(audio_file, thumb_path, user_msg, reply_msg):
-    await asyncio.sleep(300)  # wait 5 minutes
+    await asyncio.sleep(300)
     try:
         if reply_msg.chat.id != SONG_DUMP_ID:
             await reply_msg.delete()
@@ -89,7 +98,39 @@ async def download_audio(url, video_id, title):
 
 @app.on_message(filters.command(["song", "music"]) & filters.text)
 async def song_handler(client: Client, message: Message):
+    user_id = message.from_user.id
+    user_name = message.from_user.first_name
     query = " ".join(message.command[1:])
+    now = time.time()
+
+    # Spam check
+    if user_id in user_blocked and now < user_blocked[user_id]:
+        wait = int(user_blocked[user_id] - now)
+        return await message.reply(f"<b>You're temporarily blocked for spamming.\nTry again in {wait} seconds.</b>")
+
+    usage_list = user_usage[user_id]
+    usage_list = [t for t in usage_list if now - t < SPAM_WINDOW]
+    usage_list.append(now)
+    user_usage[user_id] = usage_list
+
+    if len(usage_list) > SPAM_LIMIT:
+        user_blocked[user_id] = now + BLOCK_DURATION
+        try:
+            await app.send_message(
+                SONG_DUMP_ID,
+                f"🚫 <b>Blocked:</b> {user_name} ({user_id}) for spamming /song ({SPAM_LIMIT}+ uses in {SPAM_WINDOW}s)."
+            )
+        except: pass
+        return await message.reply("<b>You're blocked for 10 minutes due to spamming.</b>")
+
+    # Log usage
+    try:
+        await app.send_message(
+            SONG_DUMP_ID,
+            f"🎵 <b>{user_name}</b> (ID: <code>{user_id}</code>) used /song command.\n🔍 <b>Query:</b> <code>{query}</code>",
+        )
+    except: pass
+
     if not query:
         return await message.reply("<b>Give me a song name or YouTube URL to download.</b>")
 
@@ -121,10 +162,10 @@ async def song_handler(client: Client, message: Message):
     thumb_name = f"{DOWNLOADS_DIR}/{title.replace('/', '_')}.jpg"
     thumb_path = await asyncio.to_thread(download_thumbnail, thumbnail, thumb_name)
 
-    await m.edit("📥 Downloading Lossless Song File...")
+    await m.edit("📥 Downloading High Quality Lossless Track...")
     audio_file = await download_audio(link, video_id, title)
 
-    # Fallback to API URL if yt-dlp fails
+    # Fallback API download
     if not audio_file and API_URL2 and video_id:
         api_url = f"{API_URL2}?direct&id={video_id}"
         try:
@@ -138,6 +179,12 @@ async def song_handler(client: Client, message: Message):
             print(f"[API] Download failed: {e}")
 
     if not audio_file:
+        try:
+            await app.send_message(
+                SONG_DUMP_ID,
+                f"❌ <b>Download failed for:</b> {query}\n👤 <b>User:</b> {user_name} ({user_id})",
+            )
+        except: pass
         return await m.edit("<b>Failed to download song. It may be restricted or unavailable. Try a different one.</b>")
 
     dur = parse_duration(duration)
