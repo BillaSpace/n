@@ -9,45 +9,33 @@ assistantids = []
 
 log = LOGGER(__name__)
 
+
 class Userbot(Client):
     def __init__(self):
-        self.clients = [
-            (Client(
-                name="AnonXAss1",
-                api_id=config.API_ID,
-                api_hash=config.API_HASH,
-                session_string=str(config.STRING1),
-                no_updates=True,
-            ), config.STRING1, 1),
-            (Client(
-                name="AnonXAss2",
-                api_id=config.API_ID,
-                api_hash=config.API_HASH,
-                session_string=str(config.STRING2),
-                no_updates=True,
-            ), config.STRING2, 2),
-            (Client(
-                name="AnonXAss3",
-                api_id=config.API_ID,
-                api_hash=config.API_HASH,
-                session_string=str(config.STRING3),
-                no_updates=True,
-            ), config.STRING3, 3),
-            (Client(
-                name="AnonXAss4",
-                api_id=config.API_ID,
-                api_hash=config.API_HASH,
-                session_string=str(config.STRING4),
-                no_updates=True,
-            ), config.STRING4, 4),
-            (Client(
-                name="AnonXAss5",
-                api_id=config.API_ID,
-                api_hash=config.API_HASH,
-                session_string=str(config.STRING5),
-                no_updates=True,
-            ), config.STRING5, 5),
+        self.clients = []
+
+        # Define session strings
+        session_strings = [
+            config.STRING1,
+            config.STRING2,
+            config.STRING3,
+            config.STRING4,
+            config.STRING5,
         ]
+
+        # Create clients and add legacy attributes
+        for idx, string in enumerate(session_strings, start=1):
+            if string:
+                client = Client(
+                    name=f"AnonXAss{idx}",
+                    api_id=config.API_ID,
+                    api_hash=config.API_HASH,
+                    session_string=str(string),
+                    no_updates=True,
+                )
+                self.clients.append((client, string, idx))
+                # Add backward-compatible attribute: one, two, etc.
+                setattr(self, f"{['one','two','three','four','five'][idx-1]}", client)
 
     async def start_assistant(self, client, assistant_num):
         async def try_start(client, max_retries=3):
