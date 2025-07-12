@@ -1,95 +1,128 @@
 import re
 import json
 from typing import Union, List, Dict
-import asyncio
-import aiohttp
+
+import requests
 from bs4 import BeautifulSoup
-from youtubesearchpython.__future__ import VideosSearch
+from youtubesearchpython import VideosSearch
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class AppleAPI:
     def __init__(self):
-        self.regex = r"^https:\/\/music\.apple\.com\/"
+        # Updated regex to handle Apple Music and iTunes URLs
+        self.regex = r"^https:\/\/(music|itunes)\.apple\.com\/[a-z]{2}\/(album|playlist|artist|song)\/[a-zA-Z0-9\-._/?=&%]+"
         self.base = "https://music.apple.com/in/playlist/"
-        self.semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent requests
 
     def valid(self, link: str) -> bool:
-        """Check if the URL is a valid Apple Music URL."""
+        """Check if the URL is a valid Apple Music or iTunes URL."""
+        logger.info(f"Validating URL: {link}")
         return bool(re.match(self.regex, link))
 
-    async def fetch_html(self, url: str) -> Union[str, None]:
+    def fetch_html(self, url: str) -> Union[str, None]:
         """Fetch HTML content from the given URL."""
-        async with self.semaphore:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as r:
-                    if r.status != 200:
-                        return None
-                    return await r.text()
+        logger.info(f"Fetching HTML for URL: {url}")
+        try:
+            r = requests.get(url)
+            if r.status_code != 200:
+                logger.error(f"Failed to fetch URL {url}: Status {r.status_code}")
+                return None
+            return r.text
+        except requests.RequestException as e:
+            logger.error(f"Error fetching URL {url}: {str(e)}")
+            return None
 
     def map_yt_result(self, v: dict) -> dict:
         """Map YouTube search result to track details."""
         return {
             "title": v["title"],
             "link": v["link"],
-            "vidid": v["id"],
-            "duration_min": v["duration"],
+            "vidid": v["id"],  # Match old apple.py's key
+            "duration_min": v["duration"],  # Match old apple.py's key
             "thumb": v["thumbnails"][0]["url"].split("?")[0],
         }
 
-    async def track(self, url: str, playid: Union[bool, str] = None) -> Union[tuple[Dict, str], None]:
-        """Fetch details for an Apple Music track."""
-        async with self.semaphore:
-            if playid:
-                url = self.base + url
-            html = await self.fetch_html(url)
-            if not html:
-                return None
-            soup = BeautifulSoup(html, "html.parser")
-            title_tag = soup.find("title")
-            if not title_tag:
-                return None
-            parts = title_tag.text.split(" - ")
-            query = " ".join(parts[:2]).strip()
-            # Run YouTube search in a thread to prevent blocking
-            search = await asyncio.to_thread(VideosSearch, query, limit=1)
-            r = await search.next()
-            if not r["result"]:
-                return None
-            track_details = self.map_yt_result(r["result"][0])
-            return track_details, track_details["vidid"]
+    def track(self, url: str, playid: Union[bool, str] = None) -> Union[tuple[Dict, str], None]:
+        """Fetch details for an Apple Music or iTunes track."""
+        if playid:
+            url = self.base + url
+            logger.info(f"Constructed track URL: {url}")
 
-    async def playlist(self, url: str, playid: Union[bool, str] = None) -> Union[tuple[List[Dict], str], None]:
-        """Fetch details for an Apple Music playlist."""
-        async with self.semaphore:
-            if playid:
-                url = self.base + url
+        html = self.fetch_html(url)
+        if not html:
+            logger.error(f"No HTML content retrieved for track URL: {url}")
+            return None
+
+        soup = BeautifulSoup(html, "html.parser")
+        title_tag = soup.find("title")
+        if not title_tag:
+            logger.error("No <title> tag found in HTML")
+            return None
+
+        parts = title_tag.text.split(" - ")
+        query = " ".join(parts[:2]).strip()
+        logger.info(f"Searching YouTube for query: {query}")
+
+        results = VideosSearch(query, limit=1)
+        r = results.next()  # Synchronous call
+        if not r["result"]:
+            logger.error(f"No YouTube results found for query: {query}")
+            return None
+
+        track_details = self.map_yt_result(r["result"][0])
+        return track_details, track_details["vidid"]  # Return tuple to match old apple.py
+
+    def playlist(self, url: str, playid: Union[bool, str] = None) -> Union[tuple[List[Dict], str], None]:
+        """Fetch details for an Apple Music or iTunes playlist."""
+        if playid:
+            url = self.base + url
+            logger.info(f"Constructed playlist URL: {url}")
+
+        html = self.fetch_html(url)
+        if not html:
+            logger.error(f"No HTML content retrieved for playlist URL: {url}")
+            return None
+
+        try:
+            # Handle both playlist formats (e.g., pl.<hex> or simple playlist name)
+            playlist_id = url.split("playlist/")[1].split("?")[0] if "?" in url else url.split("playlist/")[1]
+        except IndexError:
+            logger.error(f"Invalid playlist URL format: {url}")
+            return None
+
+        soup = BeautifulSoup(html, "html.parser")
+        queries = []
+
+        for script in soup.find_all("script", {"type": "application/ld+json"}):
             try:
-                playlist_id = url.split("playlist/")[1]
-            except IndexError:
-                return None
-            html = await self.fetch_html(url)
-            if not html:
-                return None
-            soup = BeautifulSoup(html, "html.parser")
-            queries = []
-            for script in soup.find_all("script", {"type": "application/ld+json"}):
-                try:
-                    data = json.loads(script.string)
-                    if "track" in data:
-                        for track in data["track"][:50]:  # Limit to 50 tracks
-                            name = track.get("name")
-                            artist = track.get("byArtist", {}).get("name")
-                            if name and artist:
-                                queries.append(f"{name} {artist}")
-                except Exception:
-                    continue
-            if not queries:
-                return None
-            results = []
-            for query in queries:
-                search = await asyncio.to_thread(VideosSearch, query, limit=1)
-                r = await search.next()
-                if r["result"]:
-                    results.append(self.map_yt_result(r["result"][0]))
-            if not results:
-                return None
-            return results, playlist_id
+                data = json.loads(script.string)
+                if "track" in data:
+                    for track in data["track"]:
+                        name = track.get("name")
+                        artist = track.get("byArtist", {}).get("name")
+                        if name and artist:
+                            queries.append(f"{name} {artist}")
+            except Exception as e:
+                logger.warning(f"Error parsing JSON-LD: {str(e)}")
+                continue
+
+        if not queries:
+            logger.error("No tracks found in playlist")
+            return None
+
+        results = []
+        for query in queries:
+            logger.info(f"Searching YouTube for playlist track: {query}")
+            search = VideosSearch(query, limit=1)
+            r = search.next()  # Synchronous call
+            if r["result"]:
+                results.append(self.map_yt_result(r["result"][0]))
+
+        if not results:
+            logger.error("No YouTube results found for playlist tracks")
+            return None
+
+        return results, playlist_id  # Return tuple to match old apple.py
