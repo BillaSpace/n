@@ -54,17 +54,34 @@ class AppleAPI:
             return False
 
         result = data["result"][0]
-        track_details = {
-            "title": result.get("title", ""),
-            "link": result.get("link", ""),
-            "vidid": result.get("id", ""),
-            "duration_min": result.get("duration", ""),
-            "thumb": result.get("thumbnails", [{}])[0].get("url", APPLE_MUSIC_URL).split("?")[0]
-                     if result.get("thumbnails") else APPLE_MUSIC_URL
-        }
+        logger.debug(f"Raw YouTube result: {result}")
 
-        logger.info(f"Track details retrieved: {track_details}")
-        return track_details, track_details["vidid"]
+        try:
+            # Validate required fields
+            if not all(key in result for key in ["title", "link", "id", "duration"]):
+                logger.warning("Missing required fields in YouTube result.")
+                return False
+
+            track_details = {
+                "title": result.get("title", ""),
+                "link": result.get("link", ""),
+                "vidid": result.get("id", ""),
+                "duration_min": result.get("duration", ""),
+                "thumb": result.get("thumbnails", [{}])[0].get("url", APPLE_MUSIC_URL).split("?")[0]
+                         if result.get("thumbnails") and isinstance(result.get("thumbnails"), list) and len(result.get("thumbnails")) > 0
+                         else APPLE_MUSIC_URL
+            }
+
+            if not track_details["vidid"]:
+                logger.warning("YouTube video ID is empty.")
+                return False
+
+            logger.info(f"Track details retrieved: {track_details}")
+            return track_details, track_details["vidid"]
+
+        except Exception as e:
+            logger.error(f"Error processing YouTube result: {e}")
+            return False
 
     async def playlist(self, url, playid: Union[bool, str] = None):
         if playid:
