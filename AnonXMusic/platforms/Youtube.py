@@ -253,7 +253,7 @@ class YouTubeAPI:
         if "&" in link:
             link = link.split("&")[0]
         results = VideosSearch(link, limit=1)
-        return (await results.next())["result"][0]["thumbnails"][0 Nos]["url"].split("?")[0]
+        return (await results.next())["result"][0]["thumbnails"][0]["url"].split("?")[0]
 
     async def video(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
