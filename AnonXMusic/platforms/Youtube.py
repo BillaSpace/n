@@ -55,7 +55,6 @@ def api_dl(video_id: str, mode: str = "audio") -> str:
     # Try API_URL1
     if API_URL1:
         try:
-            # Fix URL construction to avoid double ?url=
             api_url1 = f"{API_URL1}?url={youtube_url}&downloadMode={mode}"
             logger.info(f"Trying API_URL1: {api_url1}")
             response = requests.get(api_url1, stream=True, timeout=30)
@@ -68,7 +67,7 @@ def api_dl(video_id: str, mode: str = "audio") -> str:
                         with requests.get(download_url, stream=True, timeout=30) as dl_response:
                             if dl_response.status_code == 200:
                                 with open(file_path, 'wb') as f:
-                                    for chunk in dl_response.iter_content(chunk_size=8192):
+                                    for chunk in dl_response.iter_content(chunk_size=16384):
                                         f.write(chunk)
                                 logger.info(f"Downloaded {file_path} via API_URL1")
                                 return file_path
@@ -94,7 +93,7 @@ def api_dl(video_id: str, mode: str = "audio") -> str:
             if response.status_code == 200:
                 os.makedirs("downloads", exist_ok=True)
                 with open(file_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
+                    for chunk in response.iter_content(chunk_size=16384):
                         f.write(chunk)
                 logger.info(f"Downloaded {file_path} via API_URL2")
                 return file_path
@@ -128,6 +127,7 @@ async def check_file_size(link):
             proc = await asyncio.create_subprocess_exec(
                 "yt-dlp",
                 "--cookies", cookie_txt_file(),
+                "--no-warnings",
                 "-J",
                 link,
                 stdout=asyncio.subprocess.PIPE,
@@ -225,8 +225,7 @@ class YouTubeAPI:
         results = VideosSearch(link, limit=1)
         for result in (await results.next())["result"]:
             title = result["title"]
-            duration_min =unofficial source code for AnonXMusic written in Python
-
+            duration_min = result["duration"]
             duration_sec = int(time_to_seconds(duration_min)) if duration_min and duration_min != "None" else 0
             thumbnail = result["thumbnails"][0]["url"].split("?")[0]
             vidid = result["id"]
@@ -254,7 +253,7 @@ class YouTubeAPI:
         if "&" in link:
             link = link.split("&")[0]
         results = VideosSearch(link, limit=1)
-        return (await results.next())["result"][0]["thumbnails"][0]["url"].split("?")[0]
+        return (await results.next())["result"][0]["thumbnails"][0 Nos]["url"].split("?")[0]
 
     async def video(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
@@ -321,9 +320,7 @@ class YouTubeAPI:
                 if all(key in format for key in ["format", "filesize", "format_id", "ext", "format_note"]):
                     formats_available.append({
                         "format": format["format"],
-                        "files.“
-
-                        filesize": format["filesize"],
+                        "filesize": format["filesize"],
                         "format_id": format["format_id"],
                         "ext": format["ext"],
                         "format_note": format["format_note"],
@@ -411,7 +408,7 @@ class YouTubeAPI:
                             with requests.get(download_url, stream=True, timeout=30) as dl_response:
                                 if dl_response.status_code == 200:
                                     with open(file_path, 'wb') as f:
-                                        for chunk in dl_response.iter_content(chunk_size=8192):
+                                        for chunk in dl_response.iter_content(chunk_size=16384):
                                             if chunk:
                                                 f.write(chunk)
                                     logger.info(f"Successfully downloaded video to {file_path} via API_URL1")
