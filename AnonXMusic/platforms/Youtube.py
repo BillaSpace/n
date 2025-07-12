@@ -61,16 +61,16 @@ def api_dl(video_id: str, mode: str = "audio") -> str:
     if API_URL1:
         try:
             # Use correct endpoint format based on mode
-            api_url1 = f"{API_URL1}?url={youtube_url}&downloadMode={mode}" if mode == "audio" else f"{API_URL1}?url={youtube_url}"
+            api_url1 = f"{API_URL1}?url={youtube_url}&downloadMode={mode}"
             logger.info(f"Trying API_URL1: {api_url1}")
-            response = requests.get(api_url1, stream=True)
+            response = requests.get(api_url1, stream=True, timeout=30)
             if response.status_code == 200:
                 try:
                     data = response.json()
                     if data.get("successful") == "success" and "url" in data.get("data", {}):
                         download_url = data["data"]["url"]
                         os.makedirs("downloads", exist_ok=True)
-                        with requests.get(download_url, stream=True) as dl_response:
+                        with requests.get(download_url, stream=True, timeout=30) as dl_response:
                             if dl_response.status_code == 200:
                                 with open(file_path, 'wb') as f:
                                     for chunk in dl_response.iter_content(chunk_size=8192):
@@ -95,7 +95,7 @@ def api_dl(video_id: str, mode: str = "audio") -> str:
         try:
             api_url2 = f"{API_URL2}?direct&id={video_id}"
             logger.info(f"Trying API_URL2: {api_url2}")
-            response = requests.get(api_url2, stream=True)
+            response = requests.get(api_url2, stream=True, timeout=30)
             if response.status_code == 200:
                 os.makedirs("downloads", exist_ok=True)
                 with open(file_path, 'wb') as f:
@@ -178,7 +178,7 @@ async def shell_cmd(cmd):
 class YouTubeAPI:
     def __init__(self):
         self.base = "https://www.youtube.com/watch?v="
-        self.regex = r"(?:youtube\.com|youtu\.be|music\.youtube\.com)"  # Updated & Added Yt Music Track 
+        self.regex = r"(?:youtube\.com|youtu\.be|music\.youtube\.com)"
         self.status = "https://www.youtube.com/oembed?url="
         self.listbase = "https://youtube.com/playlist?list="
         self.reg = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
@@ -414,19 +414,68 @@ class YouTubeAPI:
             info = x.extract_info(link, download=False)
             xyz = os.path.join("downloads", f"{info['id']}.{info['ext']}")
             if os.path.exists(xyz):
+                logger.info(f"File {xyz} already exists. Skipping download.")
                 return xyz
             x.download([link])
+            logger.info(f"Downloaded audio to {xyz} using cookies-based method")
             return xyz
 
         def video_dl():
             try:
                 video_id = extract_video_id(link)
-                path = api_dl(video_id, mode="video")
-                if path:
-                    return path
-                logger.error("API_URL1 failed, falling back to cookies-based download")
+                logger.info(f"Attempting to download video with ID: {video_id} using API_URL1")
+                
+                # Check if API_URL1 is set
+                if not API_URL1:
+                    logger.warning("API_URL1 is not set. Falling back to cookies-based download.")
+                    raise ValueError("API_URL1 is not configured.")
+
+                # Construct API_URL1 request
+                api_url1 = f"{API_URL1}?url={link}&downloadMode=video"
+                logger.info(f"Requesting API_URL1: {api_url1}")
+                
+                # Send request to API_URL1
+                response = requests.get(api_url1, stream=True, timeout=30)
+                
+                # Check if response is successful
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        logger.debug(f"API_URL1 response: {data}")
+                        
+                        # Verify if the response indicates success
+                        if data.get("successful") == "success" and "url" in data.get("data", {}):
+                            download_url = data["data"]["url"]
+                            logger.info(f"Download URL obtained: {download_url}")
+                            
+                            # Ensure downloads directory exists
+                            os.makedirs("downloads", exist_ok=True)
+                            file_path = os.path.join("downloads", f"{video_id}.mp4")
+                            
+                            # Download the video from the provided URL
+                            with requests.get(download_url, stream=True, timeout=30) as dl_response:
+                                if dl_response.status_code == 200:
+                                    with open(file_path, 'wb') as f:
+                                        for chunk in dl_response.iter_content(chunk_size=8192):
+                                            if chunk:
+                                                f.write(chunk)
+                                    logger.info(f"Successfully downloaded video to {file_path} via API_URL1")
+                                    return file_path
+                                else:
+                                    logger.error(f"Failed to download from {download_url}. Status: {dl_response.status_code}")
+                                    raise Exception(f"Download failed with status {dl_response.status_code}")
+                        else:
+                            logger.error(f"API_URL1 response invalid: {data}")
+                            raise Exception("Invalid API_URL1 response")
+                    except ValueError as e:
+                        logger.error(f"API_URL1 JSON decode error: {e}, Response: {response.text}")
+                        raise
+                else:
+                    logger.error(f"API_URL1 request failed. Status: {response.status_code}, Response: {response.text}")
+                    raise Exception(f"API_URL1 request failed with status {response.status_code}")
             except Exception as e:
                 logger.error(f"API_URL1 video download failed: {e}")
+                logger.info("Falling back to cookies-based download")
 
             # Fallback to cookies-based download
             ydl_optssx = {
@@ -437,13 +486,16 @@ class YouTubeAPI:
                 "quiet": True,
                 "cookiefile": cookie_txt_file(),
                 "no_warnings": True,
+                "merge_output_format": "mp4",
             }
             x = yt_dlp.YoutubeDL(ydl_optssx)
             info = x.extract_info(link, download=False)
             xyz = os.path.join("downloads", f"{info['id']}.{info['ext']}")
             if os.path.exists(xyz):
+                logger.info(f"File {xyz} already exists. Skipping download.")
                 return xyz
             x.download([link])
+            logger.info(f"Downloaded video to {xyz} using cookies-based method")
             return xyz
 
         def song_video_dl():
