@@ -18,7 +18,6 @@ class SoundAPI:
             "continuedl": True,
             "quiet": True,
         }
-        # Updated regex to handle both soundcloud.com and on.soundcloud.com URLs
         self.regex = r"^https?://((www\.)?soundcloud\.com|on\.soundcloud\.com)/[a-zA-Z0-9\-._/?=&%]+"
 
     def valid(self, link: str) -> bool:
@@ -44,5 +43,4 @@ class SoundAPI:
             "uploader": info["uploader"],
             "filepath": xyz,
         }
-        return track_details, xyz           }
-            return track_details, xyz
+        return track_details, xyz  # Removed extra brace
