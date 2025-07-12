@@ -41,12 +41,16 @@ def download_thumbnail(url: str, thumb_name: str) -> str | None:
     """Download thumbnail from URL and save it to thumb_name."""
     try:
         response = requests.get(url, allow_redirects=True, timeout=10)
+        response.raise_for_status()
         if response.status_code == 200:
             with open(thumb_name, "wb") as f:
                 f.write(response.content)
-            return thumb_name
+            if os.path.exists(thumb_name):
+                print(f"[Thumbnail] Downloaded {thumb_name}")
+                return thumb_name
         return None
-    except Exception:
+    except Exception as e:
+        print(f"[ThumbnailErr] Failed to download thumbnail {url}: {e}")
         return None
 
 def parse_duration(duration: str) -> int:
@@ -63,61 +67,73 @@ def parse_duration(duration: str) -> int:
     except Exception:
         return 0
 
+async def validate_url(url: str) -> bool:
+    """Validate if a URL is accessible."""
+    try:
+        response = requests.head(url, timeout=10, allow_redirects=True)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"[URLValidationErr] {url}: {e}")
+        return False
+
 async def download_audio(link: str, video_id: str, title: str) -> str | None:
     """Download audio using cookies-based yt-dlp or API_URL2 as fallback."""
-    audio_file = f"{DOWNLOADS_DIR}/{video_id}.mp3"
+    audio_file = f"{DOWNLOADS_DIR}/{video_id}.m4a"  # Changed to m4a for compatibility
 
     # Check if file already exists
     if os.path.exists(audio_file):
+        print(f"[Audio] Found existing file {audio_file}")
         return audio_file
+
+    # Validate URL before attempting download
+    if not await validate_url(link):
+        print(f"[Audio] URL {link} is not accessible")
+        return None
 
     # Try cookies-based yt-dlp download
     ydl_opts = {
-        "format": "bestaudio/best",
+        "format": "bestaudio[ext=m4a]",  # Simplified format for better compatibility
         "outtmpl": f"{DOWNLOADS_DIR}/%(id)s.%(ext)s",
         "geo_bypass": True,
         "nocheckcertificate": True,
         "quiet": True,
         "cookiefile": COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
         "no_warnings": True,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }
-        ],
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             await asyncio.to_thread(ydl.download, [link])
         if os.path.exists(audio_file):
+            print(f"[Audio] Downloaded {audio_file} via yt-dlp")
             return audio_file
     except Exception as e:
-        print(f"Cookies-based download failed for {video_id}: {e}")
+        print(f"[YTDLP Fail] Cookies-based download failed for {video_id}: {e}")
 
     # Fallback to API_URL2
     if API_URL2:
         try:
             api_url = f"{API_URL2}?direct&id={video_id}"
-            print(f"Trying API_URL2: {api_url}")
-            response = requests.get(api_url, stream=True)
-            if response.status_code == 200:
-                os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-                with open(audio_file, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                if os.path.exists(audio_file):
-                    print(f"Downloaded {audio_file} via API_URL2")
-                    return audio_file
-                else:
-                    print(f"API_URL2 download failed: File not found")
-                    if os.path.exists(audio_file):
-                        os.remove(audio_file)
+            print(f"[API] Trying API_URL2: {api_url}")
+            response = requests.get(api_url, stream=True, timeout=15)
+            response.raise_for_status()
+            # Check content type to ensure it's an audio file
+            content_type = response.headers.get("content-type", "").lower()
+            if "audio/mpeg" not in content_type and "application/octet-stream" not in content_type:
+                print(f"[API] Invalid content type: {content_type}")
+                return None
+            os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+            with open(audio_file, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            if os.path.exists(audio_file):
+                print(f"[API] Downloaded {audio_file} via API_URL2")
+                return audio_file
             else:
-                print(f"download failed from API_URL2 for {video_id}. Status: {response.status_code}")
+                print(f"[API] API_URL2 download failed: File not found")
+                if os.path.exists(audio_file):
+                    os.remove(audio_file)
         except requests.RequestException as e:
-            print(f"Error with API_URL2 for {video_id}: {e}")
+            print(f"[API] Error with API_URL2 for {video_id}: {e}")
             if os.path.exists(audio_file):
                 os.remove(audio_file)
 
@@ -127,19 +143,24 @@ async def cleanup_files(audio_file: str, thumb_path: str | None, message: Messag
     """Delete files and messages after 5 minutes, except in LOGGER_ID."""
     await asyncio.sleep(300)  # 5 minutes
     try:
-        # Delete files
-        if os.path.exists(audio_file):
+        # Delete audio file
+        if audio_file and os.path.exists(audio_file):
             os.remove(audio_file)
-        if thumb_path and os.path.exists(thumb_path):
+            print(f"[Cleanup] Deleted audio file {audio_file}")
+        # Delete thumbnail file if it exists and is not None
+        if thumb_path and isinstance(thumb_path, str) and os.path.exists(thumb_path):
             os.remove(thumb_path)
+            print(f"[Cleanup] Deleted thumbnail {thumb_path}")
         # Delete user message (in groups/supergroups or DM)
         if message.chat.id != LOGGER_ID:
             await message.delete()
+            print(f"[Cleanup] Deleted user message in chat {message.chat.id}")
         # Delete bot's reply message (audio message)
         if reply_message and reply_message.chat.id != LOGGER_ID:
             await reply_message.delete()
+            print(f"[Cleanup] Deleted reply message in chat {reply_message.chat.id}")
     except Exception as e:
-        print(f"Cleanup failed: {e}")
+        print(f"[CleanupErr] Failed: {e}")
 
 @app.on_message(filters.command(["song", "music"]))
 async def download_song(client: Client, message: Message):
@@ -198,7 +219,7 @@ async def download_song(client: Client, message: Message):
             result = result[0] if isinstance(result, list) else result
             video_id = result.get("id")
             link = f"https://www.youtube.com/watch?v={video_id}"
-            title = result.get("title", "Unknown")
+            title = result.get("title", "Unknown")[:60]  # Truncate title for safety
             thumbnail = result.get("thumbnails", [{}])[0].get("url")
             duration = result.get("duration", "0:00")
             channel_name = result.get("channel", {}).get("name", "Unknown")
@@ -208,23 +229,23 @@ async def download_song(client: Client, message: Message):
             thumb_path = await asyncio.to_thread(download_thumbnail, thumbnail, thumb_name)
 
             # Download audio
-            await m.edit(f"Downloading Loseless Song file (Attempt {attempt}/{MAX_RETRIES})...")
+            await m.edit(f"Downloading Lossless Song File (Attempt {attempt}/{MAX_RETRIES})...")
             audio_file = await download_audio(link, video_id, title)
             if audio_file:
                 break  # Success, exit retry loop
             else:
-                print(f"Download failed for video ID {video_id}. Retrying...")
-                if thumb_path and os.path.exists(thumb_path):
+                print(f"[DownloadFail] Failed for video ID {video_id}. Retrying...")
+                if thumb_path and isinstance(thumb_path, str) and os.path.exists(thumb_path):
                     os.remove(thumb_path)
                 if attempt == MAX_RETRIES:
-                    await m.edit("Failed to download the song after multiple attempts.")
+                    await m.edit("Failed to download the song after multiple attempts. The video may be unavailable or restricted.")
                     return
 
         # Parse duration
         dur = parse_duration(duration)
 
         # Create a copy of the file for the logger
-        logger_file = f"{DOWNLOADS_DIR}/{video_id}_logger_{int(time.time())}.mp3"
+        logger_file = f"{DOWNLOADS_DIR}/{video_id}_logger_{int(time.time())}.m4a"
         if os.path.exists(audio_file):
             import shutil
             shutil.copy(audio_file, logger_file)
@@ -242,16 +263,16 @@ async def download_song(client: Client, message: Message):
                 performer="BillaSpace",
                 duration=dur,
                 caption=logger_caption,
-                thumb=thumb_path if thumb_path else None
+                thumb=thumb_path if thumb_path and isinstance(thumb_path, str) and os.path.exists(thumb_path) else None
             )
-        except Exception:
-            pass  # Silently handle logger ID errors
+        except Exception as e:
+            print(f"[LoggerErr] Failed to send to LOGGER_ID: {e}")
 
         # Send audio to user
-        await m.edit("Uploading Your Loseless Song File Wait...")
+        await m.edit("Uploading Your Lossless Song File, Please Wait...")
         reply_message = await message.reply_audio(
             audio=audio_file,
-            thumb=thumb_path,
+            thumb=thumb_path if thumb_path and isinstance(thumb_path, str) and os.path.exists(thumb_path) else None,
             title=title,
             duration=dur,
             caption=caption,
@@ -267,4 +288,5 @@ async def download_song(client: Client, message: Message):
         await m.delete()
 
     except Exception as e:
-        await m.edit(f"An error occurred While Auto Deletion: {str(e)}. Please try again later.")
+        print(f"[UnhandledErr] {e}")
+        await m.edit(f"An error occurred: {str(e)}. Please try again later.")
