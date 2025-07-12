@@ -2,8 +2,7 @@ import re
 import json
 from typing import Union, List, Dict
 import unicodedata
-
-import requests
+import aiohttp
 from bs4 import BeautifulSoup
 from youtubesearchpython.__future__ import VideosSearch
 import logging
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 class AppleAPI:
     def __init__(self):
         # Updated regex to handle both Apple Music and iTunes URL formats
-        self.regex = r"^https:\/\/(music|itunes)\.apple\.com\/[a-z]{2}\/(album|playlist|artist|song)\/[a-zA-Z0-9\-._/?=&%]+(\?i=[0-9]+&ls)?$"
+        self.regex = r"^https:\/\/(music|itunes)\.apple\.com\/[a-z]{2}\/(album|playlist|artist|song)\/[a-zA-Z0-9\-._/?=&%]+(\?i=[09]+&ls)?$"
         self.base = "https://music.apple.com/in/playlist/"
 
     async def valid(self, link: str) -> bool:
@@ -23,16 +22,17 @@ class AppleAPI:
         logger.info(f"Validating URL: {link}")
         return bool(re.match(self.regex, link))
 
-    def fetch_html(self, url: str) -> Union[str, None]:
-        """Fetch HTML content from the given URL synchronously."""
+    async def fetch_html(self, url: str) -> Union[str, None]:
+        """Fetch HTML content from the given URL asynchronously."""
         logger.info(f"Fetching HTML for URL: {url}")
         try:
-            r = requests.get(url)
-            if r.status_code != 200:
-                logger.error(f"Failed to fetch URL {url}: Status {r.status_code}")
-                return None
-            return r.text
-        except requests.RequestException as e:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        logger.error(f"Failed to fetch URL {url}: Status {response.status}")
+                        return None
+                    return await response.text()
+        except aiohttp.ClientError as e:
             logger.error(f"Error fetching URL {url}: {str(e)}")
             return None
 
@@ -41,7 +41,7 @@ class AppleAPI:
         return {
             "title": v["title"],
             "link": v["link"],
-            "vidid": v["id"],  # Match old apple.py's key
+            "vidid": v["id"],  # Match old apple.py's keyVol
             "duration_min": v["duration"],  # Match old apple.py's key
             "thumb": v["thumbnails"][0]["url"].split("?")[0],
         }
@@ -52,7 +52,7 @@ class AppleAPI:
             url = self.base + url
             logger.info(f"Constructed track URL: {url}")
 
-        html = self.fetch_html(url)
+        html = await self.fetch_html(url)
         if not html:
             logger.error(f"No HTML content retrieved for track URL: {url}")
             return None
@@ -112,16 +112,36 @@ class AppleAPI:
             url = self.base + url
             logger.info(f"Constructed playlist URL: {url}")
 
-        html = self.fetch_html(url)
+        html = await self.fetch_html(url)
         if not html:
             logger.error(f"No HTML content retrieved for playlist URL: {url}")
             return None
 
+        # Improved playlist ID extraction with regex
         try:
-            # Handle both playlist formats (e.g., pl.<hex> or simple playlist name)
-            playlist_id = url.split("playlist/")[1].split("?")[0] if "?" in url else url.split("playlist/")[1]
-        except IndexError:
-            logger.error(f"Invalid playlist URL format: {url}")
+            # Match playlist ID (hex or name) after 'playlist/'
+            playlist_id_match = re.search(r"playlist/([a-zA-Z0-9\-._]+)(?:\?|$)", url)
+            if not playlist_id_match:
+                logger.error(f"Invalid playlist URL format: {url}")
+                return None
+            playlist_id = playlist_id_match.group(1)
+
+            # Validate if it's a hex playlist ID (e.g., pl.<hex>)
+            if playlist_id.startswith("pl."):
+                hex_id = playlist_id[3:]  # Remove 'pl.' prefix
+                if not re.match(r"^[0-9a-fA-F]+$", hex_id):
+                    logger.error(f"Invalid hexadecimal playlist ID: {hex_id}")
+                    return None
+                logger.info(f"Extracted hexadecimal playlist ID: {playlist_id}")
+            else:
+                # Validate non-hex playlist name (basic check for printable characters)
+                if not re.match(r"^[a-zA-Z0-9\-._]+$", playlist_id):
+                    logger.error(f"Invalid playlist name format: {playlist_id}")
+                    return None
+                logger.info(f"Extracted playlist name: {playlist_id}")
+
+        except Exception as e:
+            logger.error(f"Error extracting playlist ID from URL {url}: {str(e)}")
             return None
 
         soup = BeautifulSoup(html, "html.parser")
