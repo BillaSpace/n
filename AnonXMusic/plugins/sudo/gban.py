@@ -1,7 +1,6 @@
 import asyncio
-
 from pyrogram import filters
-from pyrogram.errors import FloodWait, UserNotParticipant, RPCError
+from pyrogram.errors import FloodWait, MessageIdInvalid
 from pyrogram.types import Message
 
 from AnonXMusic import app
@@ -23,26 +22,29 @@ from config import BANNED_USERS
 @app.on_message(filters.command(["gban", "globalban"]) & SUDOERS)
 @language
 async def global_ban(client, message: Message, _):
-    user = await extract_user(message)
-    if not user:
+    if not message.reply_to_message and len(message.command) != 2:
         return await message.reply_text(_["general_1"])
-    
+
+    try:
+        user = await extract_user(message)
+    except Exception:
+        return await message.reply_text(_["general_1"])
+
     if user.id == message.from_user.id:
         return await message.reply_text(_["gban_1"])
-    elif user.id == app.id:
+    if user.id == app.id:
         return await message.reply_text(_["gban_2"])
-    elif user.id in SUDOERS:
+    if user.id in SUDOERS:
         return await message.reply_text(_["gban_3"])
-    
-    is_gbanned = await is_banned_user(user.id)
-    if is_gbanned:
+    if await is_banned_user(user.id):
         return await message.reply_text(_["gban_4"].format(user.mention))
 
-    if user.id not in BANNED_USERS:
-        BANNED_USERS.add(user.id)
+    BANNED_USERS.add(user.id)
 
-    chats_data = await get_served_chats()
-    served_chats = [int(c.chat_id) if not isinstance(c, int) else int(c) for c in chats_data]
+    served_chats = []
+    chats = await get_served_chats()
+    for chat in chats:
+        served_chats.append(int(chat.get("chat_id", 0)))
 
     time_expected = get_readable_time(len(served_chats))
     mystic = await message.reply_text(_["gban_5"].format(user.mention, time_expected))
@@ -51,27 +53,30 @@ async def global_ban(client, message: Message, _):
     for chat_id in served_chats:
         try:
             await app.ban_chat_member(chat_id, user.id)
-            number_of_chats += 1
-            try:
-                async for msg in app.search_messages(chat_id, from_user=user.id):
+            async for msg in app.search_messages(chat_id, from_user=user.id):
+                try:
+                    await app.delete_messages(chat_id, msg.id)
+                except FloodWait as e:
+                    await asyncio.sleep(e.value)
                     try:
                         await app.delete_messages(chat_id, msg.id)
-                        await asyncio.sleep(0.1)
-                    except Exception:
+                    except (MessageIdInvalid, Exception):
                         continue
-            except Exception:
-                continue
-        except FloodWait as fw:
-            await asyncio.sleep(fw.value)
+                except (MessageIdInvalid, Exception):
+                    continue
+            number_of_chats += 1
+        except FloodWait as e:
+            await asyncio.sleep(e.value)
         except Exception:
             continue
 
     await add_banned_user(user.id)
+
     await message.reply_text(
         _["gban_6"].format(
             app.mention,
-            message.chat.title if message.chat else "Unknown",
-            message.chat.id if message.chat else "N/A",
+            message.chat.title,
+            message.chat.id,
             user.mention,
             user.id,
             message.from_user.mention,
@@ -83,20 +88,24 @@ async def global_ban(client, message: Message, _):
 
 @app.on_message(filters.command(["ungban"]) & SUDOERS)
 @language
-async def global_un(client, message: Message, _):
-    user = await extract_user(message)
-    if not user:
+async def global_unban(client, message: Message, _):
+    if not message.reply_to_message and len(message.command) != 2:
         return await message.reply_text(_["general_1"])
 
-    is_gbanned = await is_banned_user(user.id)
-    if not is_gbanned:
+    try:
+        user = await extract_user(message)
+    except Exception:
+        return await message.reply_text(_["general_1"])
+
+    if not await is_banned_user(user.id):
         return await message.reply_text(_["gban_7"].format(user.mention))
 
-    if user.id in BANNED_USERS:
-        BANNED_USERS.remove(user.id)
+    BANNED_USERS.discard(user.id)
 
-    chats_data = await get_served_chats()
-    served_chats = [int(c.chat_id) if not isinstance(c, int) else int(c) for c in chats_data]
+    served_chats = []
+    chats = await get_served_chats()
+    for chat in chats:
+        served_chats.append(int(chat.get("chat_id", 0)))
 
     time_expected = get_readable_time(len(served_chats))
     mystic = await message.reply_text(_["gban_8"].format(user.mention, time_expected))
@@ -106,8 +115,8 @@ async def global_un(client, message: Message, _):
         try:
             await app.unban_chat_member(chat_id, user.id)
             number_of_chats += 1
-        except FloodWait as fw:
-            await asyncio.sleep(fw.value)
+        except FloodWait as e:
+            await asyncio.sleep(e.value)
         except Exception:
             continue
 
@@ -126,15 +135,34 @@ async def gbanned_list(client, message: Message, _):
     mystic = await message.reply_text(_["gban_11"])
     msg = _["gban_12"]
     count = 0
+
     users = await get_banned_users()
     for user_id in users:
         count += 1
         try:
             user = await app.get_users(user_id)
-            name = user.first_name if not user.mention else user.mention
-            msg += f"{count}➤ {name}\n"
+            mention = user.mention if user.mention else user.first_name
+            msg += f"{count}➤ {mention}\n"
         except Exception:
             msg += f"{count}➤ {user_id}\n"
-            continue
 
     await mystic.edit_text(msg)
+
+
+@app.on_message(filters.group, group=999)
+async def delete_gbanned_messages(_, message: Message):
+    user = message.from_user
+    if not user:
+        return
+    if not await is_banned_user(user.id):
+        return
+    try:
+        await message.delete()
+    except FloodWait as e:
+        await asyncio.sleep(e.value)
+        try:
+            await message.delete()
+        except (MessageIdInvalid, Exception):
+            pass
+    except (MessageIdInvalid, Exception):
+        pass
