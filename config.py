@@ -81,6 +81,8 @@ autoclean = []
 confirmer = {}
 
 
+APPLE_MUSIC_URL = getenv("APPLE_MUSIC_URL", "https://graph.org/file/d2dd5501c8dbbc4bda6b1-9524cfeb69e012baaf.jpg")  # default fallback
+
 START_IMG_URL = getenv(
     "START_IMG_URL", "https://graph.org/file/fb93a2cd43c367f62c01b-50e610807938aff356.jpg"
 )
