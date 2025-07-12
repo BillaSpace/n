@@ -78,7 +78,7 @@ async def validate_url(url: str) -> bool:
 
 async def download_audio(link: str, video_id: str, title: str) -> str | None:
     """Download audio using cookies-based yt-dlp or API_URL2 as fallback."""
-    audio_file = f"{DOWNLOADS_DIR}/{video_id}.m4a"  # Changed to m4a for compatibility
+    audio_file = f"{DOWNLOADS_DIR}/{video_id}.m4a"  # Using m4a for compatibility
 
     # Check if file already exists
     if os.path.exists(audio_file):
@@ -125,7 +125,9 @@ async def download_audio(link: str, video_id: str, title: str) -> str | None:
             with open(audio_file, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            if os.path.exists(audio_file):
+            if os.path.exists(audio_file
+
+):
                 print(f"[API] Downloaded {audio_file} via API_URL2")
                 return audio_file
             else:
@@ -171,7 +173,7 @@ async def download_song(client: Client, message: Message):
     last_message_time = user_last_message_time.get(user_id, 0)
     if current_time - last_message_time < SPAM_WINDOW_SECONDS:
         user_last_message_time[user_id] = current_time
-        user_command_count[user_id] = user_command_count.get(user_id, 0) + 1
+        user_command_count[new_user_id] = user_command_count.get(user_id, 0) + 1
         if user_command_count[user_id] > SPAM_THRESHOLD:
             reply = await message.reply_text(
                 f"{message.from_user.mention} Please avoid spamming. Try again after 5 seconds."
