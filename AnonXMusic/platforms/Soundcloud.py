@@ -1,5 +1,6 @@
 import re
 from os import path
+import asyncio
 from yt_dlp import YoutubeDL
 from AnonXMusic.utils.formatters import seconds_to_min
 import logging
@@ -12,25 +13,26 @@ class SoundAPI:
     def __init__(self):
         self.opts = {
             "outtmpl": "downloads/%(id)s.%(ext)s",
-            "format": "bestaudio/best",
+            "format": "bestaudio/best",  # Kept from current for better audio quality
             "retries": 3,
             "nooverwrites": False,
             "continuedl": True,
             "quiet": True,
         }
-        self.regex = r"^https?://((www\.)?soundcloud\.com|on\.soundcloud\.com)/[a-zA-Z0-9\-._/?=&%]+"
+        self.regex = r"^https?://((www\.)?soundcloud\.com|on\.soundcloud\.com)/[a-zA-Z0-9\-._/?=&%]+"  # Kept from current for robust validation
 
-    def valid(self, link: str) -> bool:
+    async def valid(self, link: str) -> bool:
         """Check if the URL is a valid SoundCloud URL."""
         logger.info(f"Validating SoundCloud URL: {link}")
         return bool(re.match(self.regex, link))
 
-    def download(self, url: str) -> tuple[dict, str] | bool:
-        """Download audio from a SoundCloud URL and return track details."""
+    async def download(self, url: str) -> tuple[dict, str] | bool:
+        """Download audio from a SoundCloud URL and return track details asynchronously."""
         logger.info(f"Downloading from URL: {url}")
         d = YoutubeDL(self.opts)
         try:
-            info = d.extract_info(url, download=True)
+            # Run synchronous yt_dlp extract_info in a thread to avoid blocking
+            info = await asyncio.to_thread(d.extract_info, url, download=True)
         except Exception as e:
             logger.error(f"Failed to download from {url}: {str(e)}")
             return False
@@ -43,4 +45,4 @@ class SoundAPI:
             "uploader": info["uploader"],
             "filepath": xyz,
         }
-        return track_details, xyz  # Removed extra brace
+        return track_details, xyz
