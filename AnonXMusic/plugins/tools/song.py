@@ -114,7 +114,7 @@ async def song_handler(client: Client, message: Message):
 
     if user_id in user_blocked and now < user_blocked[user_id]:
         wait = int(user_blocked[user_id] - now)
-        return await message.reply(f"<b>You're temporarily blocked for spamming.\nTry again in {wait} seconds.</b>")
+        return await message.reply(f"<b>You're temporarily blocked Due to spamming on me.\nTry again in {wait} seconds.</b>")
 
     usage_list = user_usage[user_id]
     usage_list = [t for t in usage_list if now - t < SPAM_WINDOW]
@@ -143,7 +143,7 @@ async def song_handler(client: Client, message: Message):
 
     # ✅ Normalize YouTube Music URLs
     if "music.youtube.com" in query:
-        query = query.replace("music.youtube.com", "www.youtube.com")
+        query = query.replace("music.youtube.com", "www.youtube.com/watch?v=")
 
     if "playlist?" in query or "list=" in query:
         return await message.reply("<b>Playlists are not allowed. Only single videos.</b>")
@@ -154,7 +154,7 @@ async def song_handler(client: Client, message: Message):
         search = VideosSearch(query, limit=MAX_RETRIES)
         search_results = await search.next()
         if not search_results.get("result"):
-            return await m.edit("<b>No results found for your query.</b>")
+            return await m.edit("<b>No results found for your query Re-check Song Name , if Using Yt Music URL, remove everything after &si= From URL.</b>")
     except Exception as e:
         print(f"[Search] Error: {e}")
         return await m.edit("<b>Search error occurred. Please try again.</b>")
