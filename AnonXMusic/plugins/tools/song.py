@@ -49,13 +49,23 @@ def download_thumbnail(url: str, file_path: str):
     return None
 
 async def cleanup_files(audio_file, thumb_path, user_msg, reply_msg):
-    await asyncio.sleep(300)
+    await asyncio.sleep(300)  # 5 minutes
+
     try:
+        # Skip deletion only for the logger/dump channel
         if user_msg.chat.id != SONG_DUMP_ID:
-            await reply_msg.delete()
-            await user_msg.delete()
+            # Try deleting from private, group, or supergroup
+            try:
+                await reply_msg.delete()
+            except Exception as e:
+                print(f"[Cleanup] Failed to delete reply message: {e}")
+            try:
+                await user_msg.delete()
+            except Exception as e:
+                print(f"[Cleanup] Failed to delete user message: {e}")
     except Exception as e:
         print(f"[Cleanup] Message deletion error: {e}")
+
     try:
         if os.path.exists(audio_file):
             os.remove(audio_file)
@@ -114,7 +124,7 @@ async def song_handler(client: Client, message: Message):
 
     if user_id in user_blocked and now < user_blocked[user_id]:
         wait = int(user_blocked[user_id] - now)
-        return await message.reply(f"<b>You're temporarily blocked Due to spamming on me.\nTry again in {wait} seconds.</b>")
+        return await message.reply(f"<b>You're temporarily blocked for spamming.\nTry again in {wait} seconds.</b>")
 
     usage_list = user_usage[user_id]
     usage_list = [t for t in usage_list if now - t < SPAM_WINDOW]
@@ -143,7 +153,7 @@ async def song_handler(client: Client, message: Message):
 
     # ✅ Normalize YouTube Music URLs
     if "music.youtube.com" in query:
-        query = query.replace("music.youtube.com", "www.youtube.com/watch?v=")
+        query = query.replace("music.youtube.com", "www.youtube.com")
 
     if "playlist?" in query or "list=" in query:
         return await message.reply("<b>Playlists are not allowed. Only single videos.</b>")
@@ -154,7 +164,7 @@ async def song_handler(client: Client, message: Message):
         search = VideosSearch(query, limit=MAX_RETRIES)
         search_results = await search.next()
         if not search_results.get("result"):
-            return await m.edit("<b>No results found for your query Re-check Song Name , if Using Yt Music URL, remove everything after &si= From URL.</b>")
+            return await m.edit("<b>No results found for your query.</b>")
     except Exception as e:
         print(f"[Search] Error: {e}")
         return await m.edit("<b>Search error occurred. Please try again.</b>")
@@ -206,7 +216,7 @@ async def song_handler(client: Client, message: Message):
         f"<i>Powered by Space-X Ashlyn API</i>"
     )
 
-    await m.edit("🎧 Uploading your Requested Track...")
+    await m.edit("🎧 Uploading your song...")
 
     try:
         reply_msg = await message.reply_audio(
