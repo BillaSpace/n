@@ -8,7 +8,6 @@ from collections import defaultdict
 from AnonXMusic import app
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.errors import FloodWait
 from youtubesearchpython.__future__ import VideosSearch
 from config import API_URL2, LOGGER_ID as SONG_DUMP_ID
 
@@ -16,19 +15,15 @@ DOWNLOADS_DIR = "downloads"
 COOKIES_PATH = "cookies/cookies.txt"
 MAX_RETRIES = 3
 SPAM_LIMIT = 5
-SPAM_WINDOW = 60  # 60 seconds
+SPAM_WINDOW = 60  # seconds
 BLOCK_DURATION = 600  # 10 minutes
 
 user_usage = defaultdict(list)
 user_blocked = {}
 
-# Ensure folders
 if not os.path.exists(DOWNLOADS_DIR):
     os.makedirs(DOWNLOADS_DIR)
-if not os.path.exists("cookies"):
-    os.makedirs("cookies")
 
-# Logger to suppress yt-dlp spam
 class QuietLogger:
     def debug(self, msg): pass
     def warning(self, msg): pass
@@ -56,7 +51,7 @@ def download_thumbnail(url: str, file_path: str):
 async def cleanup_files(audio_file, thumb_path, user_msg, reply_msg):
     await asyncio.sleep(300)
     try:
-        if reply_msg.chat.id != SONG_DUMP_ID:
+        if user_msg.chat.id != SONG_DUMP_ID:
             await reply_msg.delete()
             await user_msg.delete()
     except Exception as e:
@@ -69,20 +64,34 @@ async def cleanup_files(audio_file, thumb_path, user_msg, reply_msg):
     except Exception as e:
         print(f"[Cleanup] File deletion error: {e}")
 
-async def download_audio(url, video_id, title):
+async def download_audio(url, video_id, title, m):
     output = os.path.join(DOWNLOADS_DIR, f"{video_id}_{int(time.time())}.m4a")
+    progress_msg = m
+
+    def progress_hook(d):
+        if d['status'] == 'downloading':
+            percent = d.get("_percent_str", "").strip()
+            eta = d.get("eta", 0)
+            speed = d.get("_speed_str", "N/A").strip()
+            text = f"📥 Downloading...\n\n<b>Progress:</b> {percent}\n<b>ETA:</b> {eta}s\n<b>Speed:</b> {speed}"
+            try:
+                asyncio.create_task(progress_msg.edit(text))
+            except:
+                pass
+
     ydl_opts = {
-        "format": "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio",
+        "format": "bestaudio[ext=m4a]/bestaudio",
         "outtmpl": output,
         "noplaylist": True,
         "quiet": True,
         "logger": QuietLogger(),
+        "progress_hooks": [progress_hook],
         "cookiefile": COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
         "no_warnings": True,
         "ignoreerrors": True,
         "geo_bypass": True,
         "nocheckcertificate": True,
-        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "user_agent": "Mozilla/5.0",
     }
 
     for attempt in range(MAX_RETRIES):
@@ -103,7 +112,6 @@ async def song_handler(client: Client, message: Message):
     query = " ".join(message.command[1:])
     now = time.time()
 
-    # Spam check
     if user_id in user_blocked and now < user_blocked[user_id]:
         wait = int(user_blocked[user_id] - now)
         return await message.reply(f"<b>You're temporarily blocked for spamming.\nTry again in {wait} seconds.</b>")
@@ -123,7 +131,6 @@ async def song_handler(client: Client, message: Message):
         except: pass
         return await message.reply("<b>You're blocked for 10 minutes due to spamming.</b>")
 
-    # Log usage
     try:
         await app.send_message(
             SONG_DUMP_ID,
@@ -162,10 +169,8 @@ async def song_handler(client: Client, message: Message):
     thumb_name = f"{DOWNLOADS_DIR}/{title.replace('/', '_')}.jpg"
     thumb_path = await asyncio.to_thread(download_thumbnail, thumbnail, thumb_name)
 
-    await m.edit("📥 Downloading High Quality Lossless Track...")
-    audio_file = await download_audio(link, video_id, title)
+    audio_file = await download_audio(link, video_id, title, m)
 
-    # Fallback API download
     if not audio_file and API_URL2 and video_id:
         api_url = f"{API_URL2}?direct&id={video_id}"
         try:
@@ -185,27 +190,46 @@ async def song_handler(client: Client, message: Message):
                 f"❌ <b>Download failed for:</b> {query}\n👤 <b>User:</b> {user_name} ({user_id})",
             )
         except: pass
-        return await m.edit("<b>Failed to download song. It may be restricted or unavailable. Try a different one.</b>")
+        return await m.edit("<b>Failed to download song. Try a different one.</b>")
 
     dur = parse_duration(duration)
-    caption = f"📻 <b><a href=\"{link}\">{title}</a></b>\n🕒 Duration: {duration}\n🎙️ By: {channel_name}"
+    performer_name = app.name or "BillaMusic"
+
+    caption = (
+        f"📻 <b><a href=\"{link}\">{title}</a></b>\n"
+        f"🕒 Duration: {duration}\n"
+        f"🎙️ By: {channel_name}\n\n"
+        f"<i>Powered by Space-X Ashlyn API</i>"
+    )
 
     await m.edit("🎧 Uploading your song...")
+
     try:
         reply_msg = await message.reply_audio(
             audio=audio_file,
             title=title,
-            performer=channel_name,
+            performer=performer_name,
             duration=dur,
             caption=caption,
             thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🎧 More", url="https://t.me/BillaSpace")]
+                [InlineKeyboardButton("🎧😄 More Songs", url="https://t.me/BillaSpace")]
             ])
         )
+
+        await app.send_audio(
+            chat_id=SONG_DUMP_ID,
+            audio=audio_file,
+            title=title,
+            performer=performer_name,
+            duration=dur,
+            caption=caption,
+            thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
+        )
+
+        await m.delete()
+        asyncio.create_task(cleanup_files(audio_file, thumb_path, message, reply_msg))
+
     except Exception as e:
         print(f"[Upload] Error: {e}")
         return await m.edit("<b>Failed to upload the song. Please try again.</b>")
-
-    await m.delete()
-    asyncio.create_task(cleanup_files(audio_file, thumb_path, message, reply_msg))
