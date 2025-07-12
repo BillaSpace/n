@@ -141,6 +141,10 @@ async def song_handler(client: Client, message: Message):
     if not query:
         return await message.reply("<b>Give me a song name or YouTube URL to download.</b>")
 
+    # ✅ Normalize YouTube Music URLs
+    if "music.youtube.com" in query:
+        query = query.replace("music.youtube.com", "www.youtube.com")
+
     if "playlist?" in query or "list=" in query:
         return await message.reply("<b>Playlists are not allowed. Only single videos.</b>")
 
@@ -202,7 +206,7 @@ async def song_handler(client: Client, message: Message):
         f"<i>Powered by Space-X Ashlyn API</i>"
     )
 
-    await m.edit("🎧 Uploading your song...")
+    await m.edit("🎧 Uploading your Requested Track...")
 
     try:
         reply_msg = await message.reply_audio(
