@@ -184,7 +184,7 @@ async def play_commnd(
                     details["title"],
                     details["duration_min"],
                 )
-        elif await Spotify.valid(url):
+        elif Spotify.valid(url):
             spotify = True
             if not config.SPOTIFY_CLIENT_ID and not config.SPOTIFY_CLIENT_SECRET:
                 return await mystic.edit_text(
@@ -248,7 +248,7 @@ async def play_commnd(
                 img = url
             else:
                 return await mystic.edit_text(_["play_3"])
-        elif await Resso.valid(url):
+        elif Resso.valid(url):
             try:
                 details, track_id = await Resso.track(url)
             except:
@@ -256,7 +256,7 @@ async def play_commnd(
             streamtype = "youtube"
             img = details["thumb"]
             cap = _["play_10"].format(details["title"], details["duration_min"])
-        elif await SoundCloud.valid(url):
+        elif SoundCloud.valid(url):
             try:
                 details, track_path = await SoundCloud.download(url)
             except:
