@@ -1,208 +1,88 @@
 import re
-import json
-from typing import Union, List, Dict
-import unicodedata
-import aiohttp
+import logging
+from typing import Union
 
+import aiohttp
 from bs4 import BeautifulSoup
 from youtubesearchpython.__future__ import VideosSearch
-import logging
 
-from config import APPLE_MUSIC_URL  # Fallback thumbnail
+from config import APPLE_MUSIC_URL
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class AppleAPI:
     def __init__(self):
-        self.regex = r"^https:\/\/(music|itunes)\.apple\.com\/[a-z]{2}\/(album|playlist|artist|song)\/[a-zA-Z0-9\-._/?=&%]+(\?i=[0-9]+&ls)?$"
+        self.regex = r"^(https:\/\/music.apple.com\/)(.*)$"
         self.base = "https://music.apple.com/in/playlist/"
 
-    async def valid(self, link: str) -> bool:
-        logger.info(f"Validating URL: {link}")
-        return bool(re.match(self.regex, link))
+    async def valid(self, link: str):
+        return bool(re.search(self.regex, link))
 
-    async def fetch_html(self, url: str) -> Union[str, None]:
-        logger.info(f"Fetching HTML for URL: {url}")
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    if response.status != 200:
-                        logger.error(f"Failed to fetch URL {url}: Status {response.status}")
-                        return None
-                    return await response.text()
-        except aiohttp.ClientError as e:
-            logger.error(f"Error fetching URL {url}: {str(e)}")
-            return None
-
-    def map_yt_result(self, v: dict) -> dict:
-        try:
-            thumb_url = v.get("thumbnails", [{}])[0].get("url", "")
-            thumb_url = thumb_url.split("?")[0] if thumb_url else APPLE_MUSIC_URL
-            return {
-                "title": v.get("title", ""),
-                "link": v.get("link", ""),
-                "vidid": v.get("id", ""),
-                "duration_min": v.get("duration", ""),
-                "thumb": thumb_url,
-            }
-        except Exception as e:
-            logger.error(f"Error mapping YouTube result: {str(e)}")
-            return {}
-
-    async def track(self, url: str, playid: Union[bool, str] = None) -> Union[tuple[Dict, str], None]:
+    async def track(self, url, playid: Union[bool, str] = None):
         if playid:
             url = self.base + url
-            logger.info(f"Constructed track URL: {url}")
-
-        html = await self.fetch_html(url)
-        if not html:
-            logger.error(f"No HTML content retrieved for track URL: {url}")
-            return None
-
+        logger.info(f"Validating URL: {url}")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    logger.warning(f"Failed to fetch html Apple Track page. Status code: {response.status}")
+                    return False
+                html = await response.text()
+        logger.info(f"Fetching HTML for apple track URL: {url}")
         soup = BeautifulSoup(html, "html.parser")
-        search = None
 
+        search = None
         for tag in soup.find_all("meta"):
             if tag.get("property") == "og:title":
                 search = tag.get("content")
                 break
 
         if not search:
-            title_tag = soup.find("title")
-            if not title_tag:
-                logger.error("No <title> tag found in HTML")
-                return None
+            logger.warning("og:title meta title query not found on youtube.")
+            return False
 
-            title_text = unicodedata.normalize("NFKD", title_tag.text).replace("‎", "").replace(" – Apple Music", "").strip()
-            if " – Song by " in title_text:
-                parts = title_text.split(" – Song by ")
-                if len(parts) < 2:
-                    logger.error(f"Invalid title format: {title_text}")
-                    return None
-                song = parts[0].strip()
-                artists = parts[1].split(" – ")[0].strip()
-                search = f"{song} {artists}"
-            else:
-                parts = title_text.split(" – ")
-                if len(parts) < 2:
-                    logger.error(f"Invalid title format: {title_text}")
-                    return None
-                search = " ".join(parts[:2]).strip()
+        logger.info(f"Searching YouTube for query: {search} on Apple Music")
+        results = VideosSearch(search, limit=1)
+        data = await results.next()
 
-        search = search.replace(" on Apple Music", "").strip()
-        logger.info(f"Searching YouTube for query: {search}")
+        if not data["result"]:
+            logger.warning("No YouTube results found.")
+            return False
 
-        try:
-            results = VideosSearch(search, limit=1)
-            r = await asyncio.wait_for(results.next(), timeout=30.0)
-            if not r.get("result"):
-                logger.error(f"No YouTube results found for query: {search}")
-                return None
-            track_details = self.map_yt_result(r["result"][0])
-            if not track_details:
-                logger.error(f"Failed to map YouTube result for query: {search}")
-                return None
-            track_id = re.search(r"\?i=([0-9]+)", url)
-            track_id = track_id.group(1) if track_id else track_details["vidid"]
-            return track_details, track_id
-        except asyncio.TimeoutError:
-            logger.error(f"YouTube search timed out for query: {search}")
-            return None
-        except Exception as e:
-            logger.error(f"Error processing YouTube search for {url}: {str(e)}")
-            return None
+        result = data["result"][0]
+        track_details = {
+            "title": result.get("title"),
+            "link": result.get("link"),
+            "vidid": result.get("id"),
+            "duration_min": result.get("duration"),
+            "thumb": result.get("thumbnails", [{}])[0].get("url", APPLE_MUSIC_URL).split("?")[0]
+                     if result.get("thumbnails") else APPLE_MUSIC_URL
+        }
 
-    async def playlist(self, url: str, playid: Union[bool, str] = None) -> Union[tuple[List[Dict], str], None]:
+        return track_details, track_details["vidid"]
+
+    async def playlist(self, url, playid: Union[bool, str] = None):
         if playid:
             url = self.base + url
-            logger.info(f"Constructed playlist URL: {url}")
 
-        html = await self.fetch_html(url)
-        if not html:
-            logger.error(f"No HTML content retrieved for playlist URL: {url}")
-            return None
-
-        try:
-            playlist_id_match = re.search(r"playlist/([a-zA-Z0-9\-._]+?)(?:[/?#]|$)", url)
-            if not playlist_id_match:
-                logger.error(f"Invalid playlist URL format: {url}")
-                return None
-            playlist_id = playlist_id_match.group(1)
-
-            if playlist_id.startswith("pl."):
-                hex_id = playlist_id[3:]
-                if not re.match(r"^[0-9a-fA-F]{16,}$", hex_id):
-                    logger.error(f"Invalid hexadecimal playlist ID: {hex_id}")
-                    return None
-            else:
-                if not re.match(r"^[a-zA-Z0-9\-._]{1,100}$", playlist_id):
-                    logger.error(f"Invalid playlist name format: {playlist_id}")
-                    return None
-        except Exception as e:
-            logger.error(f"Error extracting playlist ID from URL {url}: {str(e)}")
-            return None
+        playlist_id = url.split("playlist/")[1]
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return False
+                html = await response.text()
 
         soup = BeautifulSoup(html, "html.parser")
-        queries = []
-
-        for script in soup.find_all("script", {"type": "application/ld+json"}):
-            try:
-                data = json.loads(script.string)
-                if "track" in data:
-                    for track in data["track"]:
-                        name = track.get("name")
-                        artist = track.get("byArtist", {}).get("name")
-                        if name and artist:
-                            queries.append(f"{name} {artist}")
-            except Exception as e:
-                logger.warning(f"Error parsing JSON-LD: {str(e)}")
-                continue
-
-        if not queries:
-            logger.info("No tracks found in JSON-LD, attempting HTML scraping")
-            track_elements = soup.find_all("div", class_="songs-list-row")
-            for track_elem in track_elements:
-                try:
-                    track_name_elem = track_elem.find("div", class_="songs-list-row__song-name")
-                    artist_elem = track_elem.find("a", class_="songs-list-row__link")
-                    if track_name_elem and artist_elem:
-                        track_name = track_name_elem.text.strip()
-                        artist_name = artist_elem.text.strip()
-                        if track_name and artist_name:
-                            queries.append(f"{track_name} {artist_name}")
-                except Exception as e:
-                    logger.warning(f"Error parsing track from HTML: {str(e)}")
-                    continue
-
-        if not queries:
-            logger.error("No tracks found in playlist (both JSON-LD and HTML scraping failed)")
-            return None
-
+        applelinks = soup.find_all("meta", attrs={"property": "music:song"})
         results = []
-        for query in queries:
-            logger.info(f"Searching YouTube for playlist track: {query}")
-            try:
-                search = VideosSearch(query, limit=1)
-                r = await asyncio.wait_for(search.next(), timeout=30.0)
-                if r.get("result"):
-                    track_details = self.map_yt_result(r["result"][0])
-                    if track_details:
-                        results.append(track_details)
-                    else:
-                        logger.warning(f"Failed to map YouTube result for query: {query}")
-                else:
-                    logger.warning(f"No YouTube results found for query: {query}")
-            except asyncio.TimeoutError:
-                logger.warning(f"YouTube search timed out for query: {query}")
-                continue
-            except Exception as e:
-                logger.warning(f"Error searching YouTube for query {query}: {str(e)}")
-                continue
 
-        if not results:
-            logger.error("No YouTube results found for any playlist tracks")
-            return None
+        for item in applelinks:
+            try:
+                content = item["content"]
+                title_part = ((content.split("album/")[1]).split("/")[0]).replace("-", " ")
+                results.append(title_part)
+            except Exception as e:
+                logger.warning(f"Error parsing playlist item: {e}")
+                continue
 
         return results, playlist_id
