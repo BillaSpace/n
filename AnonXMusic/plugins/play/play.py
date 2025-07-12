@@ -155,7 +155,7 @@ async def play_commnd(
             return await mystic.delete()
         return
     elif url:
-        if await YouTube.exists(url):
+        if YouTube.exists(url):
             if "playlist" in url:
                 try:
                     details = await YouTube.playlist(
