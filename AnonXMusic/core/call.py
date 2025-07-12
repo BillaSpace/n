@@ -556,70 +556,72 @@ class Call(PyTgCalls):
             pings.append(await self.five.ping)
         return str(round(sum(pings) / len(pings), 3))
 
-    
 
-async def safe_start(client, name):
-    try:
-        await client.get_me()  # Check if already started
-        print(f"{name} already started.")
-        return
-    except:
-        pass  # Not started, continue below
 
-    while True:
+    async def safe_start(self, client, name):
         try:
-            await client.start()
-            print(f"{name} started successfully.")
-            break
-        except FloodWait as e:
-            print(f"FloodWait while starting {name}: Waiting {e.value} seconds...")
-            await asyncio.sleep(e.value)
-        except Exception as e:
-            print(f"Unexpected error while Safe starting Pytgcalls & its clients {name}: {e}")
-            break
-
-async def start(self):
-    LOGGER(__name__).info("Starting PyTgCalls Clients For BillaMusic...\n")
-
-    if config.STRING1:
-        await safe_start(self.one, "Assistant 1")
-    if config.STRING2:
-        await safe_start(self.two, "Assistant 2")
-    if config.STRING3:
-        await safe_start(self.three, "Assistant 3")
-    if config.STRING4:
-        await safe_start(self.four, "Assistant 4")
-    if config.STRING5:
-        await safe_start(self.five, "Assistant 5")
-
-async def decorators(self):
-    @self.one.on_kicked()
-    @self.two.on_kicked()
-    @self.three.on_kicked()
-    @self.four.on_kicked()
-    @self.five.on_kicked()
-    @self.one.on_closed_voice_chat()
-    @self.two.on_closed_voice_chat()
-    @self.three.on_closed_voice_chat()
-    @self.four.on_closed_voice_chat()
-    @self.five.on_closed_voice_chat()
-    @self.one.on_left()
-    @self.two.on_left()
-    @self.three.on_left()
-    @self.four.on_left()
-    @self.five.on_left()
-    async def stream_services_handler(_, chat_id: int):
-        await self.stop_stream(chat_id)
-
-    @self.one.on_stream_end()
-    @self.two.on_stream_end()
-    @self.three.on_stream_end()
-    @self.four.on_stream_end()
-    @self.five.on_stream_end()
-    async def stream_end_handler1(client, update: Update):
-        if not isinstance(update, StreamAudioEnded):
+            await client.get_me()  # Check if already started
+            print(f"{name} already started.")
             return
-        await self.change_stream(client, update.chat_id)
+        except:
+            pass  # Not started, continue below
+
+        while True:
+            try:
+                await client.start()
+                print(f"{name} started successfully.")
+                break
+            except FloodWait as e:
+                print(f"FloodWait while starting {name}: Waiting {e.value} seconds...")
+                await asyncio.sleep(e.value)
+            except Exception as e:
+                print(f"Unexpected error while Safe starting Pytgcalls & its clients {name}: {e}")
+                break
 
 
-Anony = Call()
+    async def start(self):
+        LOGGER(__name__).info("Starting PyTgCalls Clients For BillaMusic...\n")
+
+        if config.STRING1:
+            await self.safe_start(self.one, "Assistant 1")
+        if config.STRING2:
+            await self.safe_start(self.two, "Assistant 2")
+        if config.STRING3:
+            await self.safe_start(self.three, "Assistant 3")
+        if config.STRING4:
+            await self.safe_start(self.four, "Assistant 4")
+        if config.STRING5:
+            await self.safe_start(self.five, "Assistant 5")
+
+
+    async def decorators(self):
+        @self.one.on_kicked()
+        @self.two.on_kicked()
+        @self.three.on_kicked()
+        @self.four.on_kicked()
+        @self.five.on_kicked()
+        @self.one.on_closed_voice_chat()
+        @self.two.on_closed_voice_chat()
+        @self.three.on_closed_voice_chat()
+        @self.four.on_closed_voice_chat()
+        @self.five.on_closed_voice_chat()
+        @self.one.on_left()
+        @self.two.on_left()
+        @self.three.on_left()
+        @self.four.on_left()
+        @self.five.on_left()
+        async def stream_services_handler(_, chat_id: int):
+            await self.stop_stream(chat_id)
+
+        @self.one.on_stream_end()
+        @self.two.on_stream_end()
+        @self.three.on_stream_end()
+        @self.four.on_stream_end()
+        @self.five.on_stream_end()
+        async def stream_end_handler1(client, update: Update):
+            if not isinstance(update, StreamAudioEnded):
+                return
+            await self.change_stream(client, update.chat_id)
+
+
+Anony = call()
