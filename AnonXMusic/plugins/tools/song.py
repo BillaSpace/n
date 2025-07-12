@@ -1,294 +1,148 @@
 import os
 import asyncio
-import yt_dlp
 import time
-import re
 import requests
+import yt_dlp
+from youtubesearchpython.__future__ import VideosSearch
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from youtubesearchpython.__future__ import VideosSearch
-from AnonXMusic import app
-from config import LOGGER_ID, API_URL2
 
-# Define directories and constants
+from config import SONG_DUMP_ID, API_URL2
+from Opus import app
+
 DOWNLOADS_DIR = "downloads"
-COOKIES_DIR = "cookies"
-COOKIES_FILE = os.path.join(COOKIES_DIR, "cookies.txt")
-os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-os.makedirs(COOKIES_DIR, exist_ok=True)
+COOKIES_PATH = "cookies/cookies.txt"
+MAX_RETRIES = 3
 
-# Spam protection variables
-user_last_message_time = {}
-user_command_count = {}
-SPAM_THRESHOLD = 2
-SPAM_WINDOW_SECONDS = 5
-MAX_RETRIES = 3  # Number of retries for unavailable videos
+if not os.path.exists(DOWNLOADS_DIR):
+    os.makedirs(DOWNLOADS_DIR)
 
-def extract_video_id(link: str) -> str | None:
-    """Extracts the video ID from a YouTube or YouTube Music URL."""
-    patterns = [
-        r'youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=)([0-9A-Za-z_-]{11})',
-        r'youtu\.be\/([0-9A-Za-z_-]{11})',
-        r'music\.youtube\.com\/watch\?v=([0-9A-Za-z_-]{11})',
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, link)
-        if match:
-            return match.group(1)
-    return None
 
-def download_thumbnail(url: str, thumb_name: str) -> str | None:
-    """Download thumbnail from URL and save it to thumb_name."""
+def parse_duration(duration_str):
     try:
-        response = requests.get(url, allow_redirects=True, timeout=10)
-        response.raise_for_status()
-        if response.status_code == 200:
-            with open(thumb_name, "wb") as f:
-                f.write(response.content)
-            if os.path.exists(thumb_name):
-                print(f"[Thumbnail] Downloaded {thumb_name}")
-                return thumb_name
-        return None
-    except Exception as e:
-        print(f"[ThumbnailErr] Failed to download thumbnail {url}: {e}")
-        return None
-
-def parse_duration(duration: str) -> int:
-    """Parse duration string (e.g., 'HH:MM:SS' or 'MM:SS') to seconds."""
-    try:
-        parts = list(map(int, duration.split(":")))
-        if len(parts) == 3:
-            h, m, s = parts
-        elif len(parts) == 2:
-            h, m, s = 0, parts[0], parts[1]
-        else:
-            h, m, s = 0, 0, parts[0]
-        return h * 3600 + m * 60 + s
+        parts = duration_str.split(":")
+        return sum(int(x) * 60**i for i, x in enumerate(reversed(parts)))
     except Exception:
         return 0
 
-async def validate_url(url: str) -> bool:
-    """Validate if a URL is accessible."""
+
+def download_thumbnail(url: str, file_path: str):
     try:
-        response = requests.head(url, timeout=10, allow_redirects=True)
-        return response.status_code == 200
-    except Exception as e:
-        print(f"[URLValidationErr] {url}: {e}")
-        return False
-
-async def download_audio(link: str, video_id: str, title: str) -> str | None:
-    """Download audio using cookies-based yt-dlp or API_URL2 as fallback."""
-    audio_file = f"{DOWNLOADS_DIR}/{video_id}.m4a"  # Using m4a for compatibility
-
-    # Check if file already exists
-    if os.path.exists(audio_file):
-        print(f"[Audio] Found existing file {audio_file}")
-        return audio_file
-
-    # Validate URL before attempting download
-    if not await validate_url(link):
-        print(f"[Audio] URL {link} is not accessible")
-        return None
-
-    # Try cookies-based yt-dlp download
-    ydl_opts = {
-        "format": "bestaudio[ext=m4a]",  # Simplified format for better compatibility
-        "outtmpl": f"{DOWNLOADS_DIR}/%(id)s.%(ext)s",
-        "geo_bypass": True,
-        "nocheckcertificate": True,
-        "quiet": True,
-        "cookiefile": COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
-        "no_warnings": True,
-    }
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            await asyncio.to_thread(ydl.download, [link])
-        if os.path.exists(audio_file):
-            print(f"[Audio] Downloaded {audio_file} via yt-dlp")
-            return audio_file
-    except Exception as e:
-        print(f"[YTDLP Fail] Cookies-based download failed for {video_id}: {e}")
-
-    # Fallback to API_URL2
-    if API_URL2:
-        try:
-            api_url = f"{API_URL2}?direct&id={video_id}"
-            print(f"[API] Trying API_URL2: {api_url}")
-            response = requests.get(api_url, stream=True, timeout=15)
-            response.raise_for_status()
-            # Check content type to ensure it's an audio file
-            content_type = response.headers.get("content-type", "").lower()
-            if "audio/mpeg" not in content_type and "application/octet-stream" not in content_type:
-                print(f"[API] Invalid content type: {content_type}")
-                return None
-            os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-            with open(audio_file, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
+        r = requests.get(url, stream=True)
+        if r.status_code == 200:
+            with open(file_path, "wb") as f:
+                for chunk in r.iter_content(1024):
                     f.write(chunk)
-            if os.path.exists(audio_file
-
-):
-                print(f"[API] Downloaded {audio_file} via API_URL2")
-                return audio_file
-            else:
-                print(f"[API] API_URL2 download failed: File not found")
-                if os.path.exists(audio_file):
-                    os.remove(audio_file)
-        except requests.RequestException as e:
-            print(f"[API] Error with API_URL2 for {video_id}: {e}")
-            if os.path.exists(audio_file):
-                os.remove(audio_file)
-
+            return file_path
+    except Exception:
+        pass
     return None
 
-async def cleanup_files(audio_file: str, thumb_path: str | None, message: Message, reply_message: Message):
-    """Delete files and messages after 5 minutes, except in LOGGER_ID."""
-    await asyncio.sleep(300)  # 5 minutes
+
+async def cleanup_files(audio_file, thumb_path, user_msg, reply_msg):
+    await asyncio.sleep(300)  # wait 5 minutes
     try:
-        # Delete audio file
-        if audio_file and os.path.exists(audio_file):
+        if reply_msg.chat.id != SONG_DUMP_ID:
+            await reply_msg.delete()
+            await user_msg.delete()
+    except Exception:
+        pass
+    try:
+        if os.path.exists(audio_file):
             os.remove(audio_file)
-            print(f"[Cleanup] Deleted audio file {audio_file}")
-        # Delete thumbnail file if it exists and is not None
-        if thumb_path and isinstance(thumb_path, str) and os.path.exists(thumb_path):
+        if thumb_path and os.path.exists(thumb_path):
             os.remove(thumb_path)
-            print(f"[Cleanup] Deleted thumbnail {thumb_path}")
-        # Delete user message (in groups/supergroups or DM)
-        if message.chat.id != LOGGER_ID:
-            await message.delete()
-            print(f"[Cleanup] Deleted user message in chat {message.chat.id}")
-        # Delete bot's reply message (audio message)
-        if reply_message and reply_message.chat.id != LOGGER_ID:
-            await reply_message.delete()
-            print(f"[Cleanup] Deleted reply message in chat {reply_message.chat.id}")
-    except Exception as e:
-        print(f"[CleanupErr] Failed: {e}")
+    except Exception:
+        pass
 
-@app.on_message(filters.command(["song", "music"]))
-async def download_song(client: Client, message: Message):
-    user_id = message.from_user.id
-    current_time = time.time()
 
-    # Spam protection
-    last_message_time = user_last_message_time.get(user_id, 0)
-    if current_time - last_message_time < SPAM_WINDOW_SECONDS:
-        user_last_message_time[user_id] = current_time
-        user_command_count[new_user_id] = user_command_count.get(user_id, 0) + 1
-        if user_command_count[user_id] > SPAM_THRESHOLD:
-            reply = await message.reply_text(
-                f"{message.from_user.mention} Please avoid spamming. Try again after 5 seconds."
-            )
-            await asyncio.sleep(3)
-            await reply.delete()
-            return
-    else:
-        user_command_count[user_id] = 1
-        user_last_message_time[user_id] = current_time
+async def download_audio(url, video_id, title):
+    output = os.path.join(DOWNLOADS_DIR, f"{video_id}_{int(time.time())}.m4a")
+    ydl_opts = {
+        "format": "bestaudio[ext=m4a]",
+        "outtmpl": output,
+        "noplaylist": True,
+        "quiet": True,
+        "cookiefile": COOKIES_PATH,
+        "no_warnings": True,
+        "ignoreerrors": True,
+    }
 
-    # Extract query from the message
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        if os.path.exists(output):
+            return output
+    except yt_dlp.utils.DownloadError as e:
+        if "Webpage" not in str(e):
+            print(f"[yt-dlp] error: {e}")
+    return None
+
+
+@app.on_message(filters.command(["song", "music"]) & filters.text)
+async def song_handler(client: Client, message: Message):
     query = " ".join(message.command[1:])
     if not query:
-        await message.reply("Please provide a song name or a YouTube/YouTube Music URL.")
-        return
+        return await message.reply("<b>Give me a song name or YouTube URL to download.</b>")
 
-    # Check for playlist URLs
-    if "playlist?list=" in query or "&list=" in query:
-        reply = await message.reply("Playlists are not allowed. Please provide a single song URL or name.")
-        await asyncio.sleep(5)
-        await reply.delete()
-        return
+    if "playlist?" in query:
+        return await message.reply("<b>Playlists are not allowed. Only single videos.</b>")
 
-    # Check if query is a URL and extract video ID
-    video_id = extract_video_id(query)
-    link = f"https://www.youtube.com/watch?v={video_id}" if video_id else None
+    m = await message.reply("<b>🔎 Searching the song...</b>")
 
-    # Searching for song details
-    m = await message.reply("Searching Song As Per Your Request...")
     try:
-        # If no valid URL, treat query as song name and search
-        if not video_id:
-            search_results = (await VideosSearch(query, limit=MAX_RETRIES + 1).next()).get("result", [])
-            if not search_results:
-                await m.edit("No results found for the provided song name or URL.")
-                return
-        else:
-            search_results = [(await VideosSearch(link, limit=1).next()).get("result", [])]
-
-        # Try downloading from search results
-        for attempt, result in enumerate(search_results[:MAX_RETRIES], 1):
-            if not result:
-                continue
-            result = result[0] if isinstance(result, list) else result
-            video_id = result.get("id")
-            link = f"https://www.youtube.com/watch?v={video_id}"
-            title = result.get("title", "Unknown")[:60]  # Truncate title for safety
-            thumbnail = result.get("thumbnails", [{}])[0].get("url")
-            duration = result.get("duration", "0:00")
-            channel_name = result.get("channel", {}).get("name", "Unknown")
-
-            # Download thumbnail
-            thumb_name = f"{DOWNLOADS_DIR}/{title.replace('/', '_')}.jpg"
-            thumb_path = await asyncio.to_thread(download_thumbnail, thumbnail, thumb_name)
-
-            # Download audio
-            await m.edit(f"Downloading Lossless Song File (Attempt {attempt}/{MAX_RETRIES})...")
-            audio_file = await download_audio(link, video_id, title)
-            if audio_file:
-                break  # Success, exit retry loop
-            else:
-                print(f"[DownloadFail] Failed for video ID {video_id}. Retrying...")
-                if thumb_path and isinstance(thumb_path, str) and os.path.exists(thumb_path):
-                    os.remove(thumb_path)
-                if attempt == MAX_RETRIES:
-                    await m.edit("Failed to download the song after multiple attempts. The video may be unavailable or restricted.")
-                    return
-
-        # Parse duration
-        dur = parse_duration(duration)
-
-        # Create a copy of the file for the logger
-        logger_file = f"{DOWNLOADS_DIR}/{video_id}_logger_{int(time.time())}.m4a"
-        if os.path.exists(audio_file):
-            import shutil
-            shutil.copy(audio_file, logger_file)
-
-        # Caption for both user and logger
-        caption = f"📻 <b><a href=\"{link}\">{title}</a></b>\n🕒 Duration: {duration}\n🔧 Powered by: <a href=\"https://t.me/BillaSpace\">Space-X API</a>"
-        logger_caption = f"{caption}\n👤 Requested by: {message.from_user.mention}"
-
-        # Send audio to LOGGER_ID
-        try:
-            await client.send_audio(
-                chat_id=LOGGER_ID,
-                audio=logger_file,
-                title=title,
-                performer="BillaSpace",
-                duration=dur,
-                caption=logger_caption,
-                thumb=thumb_path if thumb_path and isinstance(thumb_path, str) and os.path.exists(thumb_path) else None
-            )
-        except Exception as e:
-            print(f"[LoggerErr] Failed to send to LOGGER_ID: {e}")
-
-        # Send audio to user
-        await m.edit("Uploading Your Lossless Song File, Please Wait...")
-        reply_message = await message.reply_audio(
-            audio=audio_file,
-            thumb=thumb_path if thumb_path and isinstance(thumb_path, str) and os.path.exists(thumb_path) else None,
-            title=title,
-            duration=dur,
-            caption=caption,
-            performer=channel_name,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🎧 More Music", url="https://t.me/BillaSpace")],
-                [InlineKeyboardButton("💻 Associated with", url="https://t.me/BillaCore")]
-            ])
-        )
-
-        # Schedule cleanup
-        asyncio.create_task(cleanup_files(audio_file, thumb_path, message, reply_message))
-        await m.delete()
-
+        search = VideosSearch(query, limit=MAX_RETRIES)
+        search_results = await search.next()
+        if not search_results["result"]:
+            return await m.edit("<b>No results found for your query.</b>")
     except Exception as e:
-        print(f"[UnhandledErr] {e}")
-        await m.edit(f"An error occurred: {str(e)}. Please try again later.")
+        return await m.edit("<b>Search error occurred.</b>")
+
+    result = search_results["result"][0]
+    video_id = result.get("id")
+    link = f"https://www.youtube.com/watch?v={video_id}"
+    title = result.get("title", "Unknown")[:60]
+    thumbnail = result.get("thumbnails", [{}])[0].get("url")
+    duration = result.get("duration", "0:00")
+    channel_name = result.get("channel", {}).get("name", "Unknown")
+
+    thumb_name = f"{DOWNLOADS_DIR}/{title.replace('/', '_')}.jpg"
+    thumb_path = await asyncio.to_thread(download_thumbnail, thumbnail, thumb_name)
+
+    await m.edit("📥 Downloading Lossless Song File...")
+    audio_file = await download_audio(link, video_id, title)
+
+    if not audio_file and API_URL2 and video_id:
+        api_url = f"{API_URL2}?direct&id={video_id}"
+        try:
+            r = requests.get(api_url, stream=True, timeout=10)
+            if r.ok and "audio" in r.headers.get("content-type", ""):
+                audio_file = f"{DOWNLOADS_DIR}/{video_id}.mp3"
+                with open(audio_file, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+        except Exception as e:
+            print(f"[API] Download failed: {e}")
+
+    if not audio_file:
+        await m.edit("<b>Failed to download song. Try a different one.</b>")
+        return
+
+    dur = parse_duration(duration)
+    caption = f"📻 <b><a href=\"{link}\">{title}</a></b>\n🕒 Duration: {duration}\n🎙️ By: {channel_name}"
+
+    await m.edit("🎧 Uploading your song...")
+    reply_msg = await message.reply_audio(
+        audio=audio_file,
+        title=title,
+        performer=channel_name,
+        duration=dur,
+        caption=caption,
+        thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎧 More", url="https://t.me/BillaSpace")]
+        ])
+    )
+
+    await m.delete()
+    asyncio.create_task(cleanup_files(audio_file, thumb_path, message, reply_msg))
