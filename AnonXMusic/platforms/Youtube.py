@@ -54,7 +54,7 @@ async def api_dl(video_id: str, mode: str = "audio") -> str:
     async with aiohttp.ClientSession() as session:
         # Try API_URL1
         if API_URL1:
-            for attempt in range(3):
+            for attempt in range(1):
                 try:
                     api_url1 = f"{API_URL1}?url={youtube_url}&downloadMode={mode}"
                     logger.info(f"Attempt {attempt + 1}: API_URL1 for {video_id}")
