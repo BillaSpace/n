@@ -4,6 +4,7 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from youtubesearchpython import VideosSearch
 import config
 import logging
+import time
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -11,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 class SpotifyAPI:
     def __init__(self):
-        # Updated regex to handle Spotify URLs
-        self.regex = r"^https:\/\/open\.spotify\.com\/[a-z]{2}\/(track|playlist|album|artist)\/[a-zA-Z0-9\-._/?=&%]+"
+        # Updated regex to handle Spotify URLs with optional country code
+        self.regex = r"^https:\/\/open\.spotify\.com\/(?:[a-z]{2}\/)?(track|playlist|album|artist)\/[a-zA-Z0-9\-._/?=&%]+"
         cid = config.SPOTIFY_CLIENT_ID
         secret = config.SPOTIFY_CLIENT_SECRET
         if cid and secret:
@@ -36,7 +37,6 @@ class SpotifyAPI:
                     logger.error(f"Spotify API call failed after {retries} attempts: {str(e)}")
                     raise e
                 logger.warning(f"Spotify API call failed, retrying... ({attempt + 1}/{retries}): {str(e)}")
-                import time
                 time.sleep(delay)
 
     def get_track_info(self, link: str) -> dict:
@@ -100,7 +100,7 @@ class SpotifyAPI:
         album_id = album["id"]
         results = album["tracks"]["items"]
         next_page = album["tracks"].get("next")
-        track_limit = 50  # Limit to 50 tracks
+        track_limit = 100  # Limit to 50 tracks
         current_count = len(results)
         while next_page and current_count < track_limit:
             next_tracks = self.safe_spotify_call(self.spotify.next, album["tracks"])
