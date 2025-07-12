@@ -4,7 +4,7 @@ from typing import Union, List, Dict
 
 import requests
 from bs4 import BeautifulSoup
-from youtubesearchpython import VideosSearch
+from youtubesearchpython.__future__ import VideosSearch
 import logging
 
 # Set up logging
@@ -13,17 +13,17 @@ logger = logging.getLogger(__name__)
 
 class AppleAPI:
     def __init__(self):
-        # Updated regex to handle both existing and new Apple Music/iTunes URL formats
+        # Updated regex to handle both Apple Music and iTunes URL formats
         self.regex = r"^https:\/\/(music|itunes)\.apple\.com\/[a-z]{2}\/(album|playlist|artist|song)\/[a-zA-Z0-9\-._/?=&%]+(\?i=[0-9]+&ls)?$"
         self.base = "https://music.apple.com/in/playlist/"
 
-    def valid(self, link: str) -> bool:
+    async def valid(self, link: str) -> bool:
         """Check if the URL is a valid Apple Music or iTunes URL."""
         logger.info(f"Validating URL: {link}")
         return bool(re.match(self.regex, link))
 
     def fetch_html(self, url: str) -> Union[str, None]:
-        """Fetch HTML content from the given URL."""
+        """Fetch HTML content from the given URL synchronously."""
         logger.info(f"Fetching HTML for URL: {url}")
         try:
             r = requests.get(url)
@@ -45,8 +45,8 @@ class AppleAPI:
             "thumb": v["thumbnails"][0]["url"].split("?")[0],
         }
 
-    def track(self, url: str, playid: Union[bool, str] = None) -> Union[tuple[Dict, str], None]:
-        """Fetch details for an Apple Music or iTunes track."""
+    async def track(self, url: str, playid: Union[bool, str] = None) -> Union[tuple[Dict, str], None]:
+        """Fetch details for an Apple Music or iTunes track asynchronously."""
         if playid:
             url = self.base + url
             logger.info(f"Constructed track URL: {url}")
@@ -74,7 +74,7 @@ class AppleAPI:
         logger.info(f"Searching YouTube for query: {query}")
 
         results = VideosSearch(query, limit=1)
-        r = results.next()  # Synchronous call
+        r = await results.next()  # Asynchronous call
         if not r["result"]:
             logger.error(f"No YouTube results found for query: {query}")
             return None
@@ -85,8 +85,8 @@ class AppleAPI:
         track_id = track_id.group(1) if track_id else track_details["vidid"]
         return track_details, track_id  # Return tuple to match old apple.py
 
-    def playlist(self, url: str, playid: Union[bool, str] = None) -> Union[tuple[List[Dict], str], None]:
-        """Fetch details for an Apple Music or iTunes playlist."""
+    async def playlist(self, url: str, playid: Union[bool, str] = None) -> Union[tuple[List[Dict], str], None]:
+        """Fetch details for an Apple Music or iTunes playlist asynchronously."""
         if playid:
             url = self.base + url
             logger.info(f"Constructed playlist URL: {url}")
@@ -146,7 +146,7 @@ class AppleAPI:
         for query in queries:
             logger.info(f"Searching YouTube for playlist track: {query}")
             search = VideosSearch(query, limit=1)
-            r = search.next()  # Synchronous call
+            r = await search.next()  # Asynchronous call
             if r["result"]:
                 results.append(self.map_yt_result(r["result"][0]))
             else:
