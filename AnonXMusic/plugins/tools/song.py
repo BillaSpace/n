@@ -14,7 +14,6 @@ from config import LOGGER_ID, API_URL2
 DOWNLOADS_DIR = "downloads"
 COOKIES_DIR = "cookies"
 COOKIES_FILE = os.path.join(COOKIES_DIR, "cookies.txt")
-MIN_FILE_SIZE = 51200  # Minimum file size in bytes to avoid corrupted downloads
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 os.makedirs(COOKIES_DIR, exist_ok=True)
 
@@ -23,8 +22,9 @@ user_last_message_time = {}
 user_command_count = {}
 SPAM_THRESHOLD = 2
 SPAM_WINDOW_SECONDS = 5
+MAX_RETRIES = 3  # Number of retries for unavailable videos
 
-def extract_video_id(link: str) -> str:
+def extract_video_id(link: str) -> str | None:
     """Extracts the video ID from a YouTube or YouTube Music URL."""
     patterns = [
         r'youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=)([0-9A-Za-z_-]{11})',
@@ -35,7 +35,7 @@ def extract_video_id(link: str) -> str:
         match = re.search(pattern, link)
         if match:
             return match.group(1)
-    raise ValueError("Invalid YouTube or YouTube Music link provided.")
+    return None
 
 def download_thumbnail(url: str, thumb_name: str) -> str | None:
     """Download thumbnail from URL and save it to thumb_name."""
@@ -68,7 +68,7 @@ async def download_audio(link: str, video_id: str, title: str) -> str | None:
     audio_file = f"{DOWNLOADS_DIR}/{video_id}.mp3"
 
     # Check if file already exists
-    if os.path.exists(audio_file) and os.path.getsize(audio_file) >= MIN_FILE_SIZE:
+    if os.path.exists(audio_file):
         return audio_file
 
     # Try cookies-based yt-dlp download
@@ -91,10 +91,10 @@ async def download_audio(link: str, video_id: str, title: str) -> str | None:
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             await asyncio.to_thread(ydl.download, [link])
-        if os.path.exists(audio_file) and os.path.getsize(audio_file) >= MIN_FILE_SIZE:
+        if os.path.exists(audio_file):
             return audio_file
     except Exception as e:
-        print(f"Cookies-based download failed: {e}")
+        print(f"Cookies-based download failed for {video_id}: {e}")
 
     # Fallback to API_URL2
     if API_URL2:
@@ -107,15 +107,15 @@ async def download_audio(link: str, video_id: str, title: str) -> str | None:
                 with open(audio_file, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
-                if os.path.exists(audio_file) and os.path.getsize(audio_file) >= MIN_FILE_SIZE:
+                if os.path.exists(audio_file):
                     print(f"Downloaded {audio_file} via API_URL2")
                     return audio_file
                 else:
-                    print(f"API_URL2 download failed: File corrupted or too small")
+                    print(f"API_URL2 download failed: File not found")
                     if os.path.exists(audio_file):
                         os.remove(audio_file)
             else:
-                print(f"API_URL2 failed for {video_id}. Status: {response.status_code}")
+                print(f"download failed from API_URL2 for {video_id}. Status: {response.status_code}")
         except requests.RequestException as e:
             print(f"Error with API_URL2 for {video_id}: {e}")
             if os.path.exists(audio_file):
@@ -162,63 +162,63 @@ async def download_song(client: Client, message: Message):
         user_command_count[user_id] = 1
         user_last_message_time[user_id] = current_time
 
-    # Extract query or URL from the message
+    # Extract query from the message
     query = " ".join(message.command[1:])
     if not query:
-        await message.reply("Please provide a YouTube or YouTube Music URL to download the song.")
+        await message.reply("Please provide a song name or a YouTube/YouTube Music URL.")
         return
 
     # Check for playlist URLs
     if "playlist?list=" in query or "&list=" in query:
-        reply = await message.reply("Playlists are not allowed. Please provide a single song URL.")
+        reply = await message.reply("Playlists are not allowed. Please provide a single song URL or name.")
         await asyncio.sleep(5)
         await reply.delete()
         return
 
-    # Validate YouTube or YouTube Music URL
-    youtube_patterns = [
-        r'youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=)([0-9A-Za-z_-]{11})',
-        r'youtu\.be\/([0-9A-Za-z_-]{11})',
-        r'music\.youtube\.com\/watch\?v=([0-9A-Za-z_-]{11})',
-    ]
-    video_id = None
-    for pattern in youtube_patterns:
-        match = re.search(pattern, query)
-        if match:
-            video_id = match.group(1)
-            break
-    if not video_id:
-        await message.reply("Please provide a valid YouTube or YouTube Music URL.")
-        return
-
-    link = f"https://www.youtube.com/watch?v={video_id}"
+    # Check if query is a URL and extract video ID
+    video_id = extract_video_id(query)
+    link = f"https://www.youtube.com/watch?v={video_id}" if video_id else None
 
     # Searching for song details
-    m = await message.reply("Searching...")
+    m = await message.reply("Searching Song As Per Your Request...")
     try:
-        results = (await VideosSearch(link, limit=1).next()).get("result", [])
-        if not results:
-            await m.edit("No results found for the provided URL.")
-            return
+        # If no valid URL, treat query as song name and search
+        if not video_id:
+            search_results = (await VideosSearch(query, limit=MAX_RETRIES + 1).next()).get("result", [])
+            if not search_results:
+                await m.edit("No results found for the provided song name or URL.")
+                return
+        else:
+            search_results = [(await VideosSearch(link, limit=1).next()).get("result", [])]
 
-        result = results[0]
-        title = result.get("title", "Unknown")
-        thumbnail = result.get("thumbnails", [{}])[0].get("url")
-        duration = result.get("duration", "0:00")
-        channel_name = result.get("channel", {}).get("name", "Unknown")
+        # Try downloading from search results
+        for attempt, result in enumerate(search_results[:MAX_RETRIES], 1):
+            if not result:
+                continue
+            result = result[0] if isinstance(result, list) else result
+            video_id = result.get("id")
+            link = f"https://www.youtube.com/watch?v={video_id}"
+            title = result.get("title", "Unknown")
+            thumbnail = result.get("thumbnails", [{}])[0].get("url")
+            duration = result.get("duration", "0:00")
+            channel_name = result.get("channel", {}).get("name", "Unknown")
 
-        # Download thumbnail
-        thumb_name = f"{DOWNLOADS_DIR}/{title.replace('/', '_')}.jpg"
-        thumb_path = await asyncio.to_thread(download_thumbnail, thumbnail, thumb_name)
+            # Download thumbnail
+            thumb_name = f"{DOWNLOADS_DIR}/{title.replace('/', '_')}.jpg"
+            thumb_path = await asyncio.to_thread(download_thumbnail, thumbnail, thumb_name)
 
-        # Download audio
-        await m.edit("Downloading audio...")
-        audio_file = await download_audio(link, video_id, title)
-        if not audio_file:
-            await m.edit("Failed to download the song or file is corrupted.")
-            if thumb_path and os.path.exists(thumb_path):
-                os.remove(thumb_path)
-            return
+            # Download audio
+            await m.edit(f"Downloading Loseless Song file (Attempt {attempt}/{MAX_RETRIES})...")
+            audio_file = await download_audio(link, video_id, title)
+            if audio_file:
+                break  # Success, exit retry loop
+            else:
+                print(f"Download failed for video ID {video_id}. Retrying...")
+                if thumb_path and os.path.exists(thumb_path):
+                    os.remove(thumb_path)
+                if attempt == MAX_RETRIES:
+                    await m.edit("Failed to download the song after multiple attempts.")
+                    return
 
         # Parse duration
         dur = parse_duration(duration)
@@ -245,10 +245,10 @@ async def download_song(client: Client, message: Message):
                 thumb=thumb_path if thumb_path else None
             )
         except Exception:
-            pass  # Silently handle loggerMostly ID errors
+            pass  # Silently handle logger ID errors
 
         # Send audio to user
-        await m.edit("Uploading audio...")
+        await m.edit("Uploading Your Loseless Song File Wait...")
         reply_message = await message.reply_audio(
             audio=audio_file,
             thumb=thumb_path,
@@ -267,4 +267,4 @@ async def download_song(client: Client, message: Message):
         await m.delete()
 
     except Exception as e:
-        await m.edit(f"An error occurred: {str(e)}. Please try again later.")
+        await m.edit(f"An error occurred While Auto Deletion: {str(e)}. Please try again later.")
