@@ -12,8 +12,6 @@ from youtubesearchpython.__future__ import VideosSearch
 from AnonXMusic.utils.database import is_on_off
 from AnonXMusic.utils.formatters import time_to_seconds
 
-import glob
-import random
 import logging
 import requests
 from config import API_URL1, API_URL2
@@ -56,12 +54,14 @@ def api_dl(video_id: str, mode: str = "audio") -> str:
         logger.info(f"{file_path} already exists. Skipping download.")
         return file_path
 
+    # Construct YouTube URL using video_id
+    youtube_url = f"https://www.youtube.com/watch?v={video_id}"
+
     # Try API_URL1
     if API_URL1:
         try:
-            # Construct YouTube URL using video_id
-            youtube_url = f"https://www.youtube.com/watch?v={video_id}"
-            api_url1 = f"{API_URL1}{youtube_url}&downloadMode={mode}"
+            # Use correct endpoint format based on mode
+            api_url1 = f"{API_URL1}?url={youtube_url}&downloadMode={mode}" if mode == "audio" else f"{API_URL1}?url={youtube_url}"
             logger.info(f"Trying API_URL1: {api_url1}")
             response = requests.get(api_url1, stream=True)
             if response.status_code == 200:
@@ -115,17 +115,16 @@ def api_dl(video_id: str, mode: str = "audio") -> str:
     logger.error(f"All APIs failed for {video_id}.")
     return None
 
-
 def cookie_txt_file():
-    folder_path = f"{os.getcwd()}/cookies"
-    filename = f"{os.getcwd()}/cookies/logs.csv"
-    txt_files = glob.glob(os.path.join(folder_path, '*.txt'))
-    if not txt_files:
-        raise FileNotFoundError("No .txt files found in the specified folder.")
-    cookie_txt_file = random.choice(txt_files)
-    with open(filename, 'a') as file:
-        file.write(f'Choosen File : {cookie_txt_file}\n')
-    return f"""cookies/{str(cookie_txt_file).split("/")[-1]}"""
+    """
+    Returns the fixed path to the cookies file in Netscape format.
+    """
+    cookie_path = "cookies/cookies.txt"
+    if not os.path.exists(cookie_path):
+        logger.error(f"Cookies file not found at {cookie_path}")
+        raise FileNotFoundError(f"Cookies file not found at {cookie_path}")
+    logger.info(f"Using cookies file: {cookie_path}")
+    return cookie_path
 
 async def check_file_size(link):
     async def get_format_info(link):
@@ -139,7 +138,7 @@ async def check_file_size(link):
         )
         stdout, stderr = await proc.communicate()
         if proc.returncode != 0:
-            print(f'Error:\n{stderr.decode()}')
+            logger.error(f'Error in get_format_info: {stderr.decode()}')
             return None
         return json.loads(stdout.decode())
 
@@ -156,7 +155,7 @@ async def check_file_size(link):
     
     formats = info.get('formats', [])
     if not formats:
-        print("No formats found.")
+        logger.error("No formats found.")
         return None
     
     total_size = parse_size(formats)
@@ -179,7 +178,7 @@ async def shell_cmd(cmd):
 class YouTubeAPI:
     def __init__(self):
         self.base = "https://www.youtube.com/watch?v="
-        self.regex = r"(?:youtube\.com|youtu\.be|music\.youtube\.com)"  # Updated to include music.youtube.com
+        self.regex = r"(?:youtube\.com|youtu\.be|music\.youtube\.com)"  # Updated & Added Yt Music Track 
         self.status = "https://www.youtube.com/oembed?url="
         self.listbase = "https://youtube.com/playlist?list="
         self.reg = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
@@ -397,9 +396,9 @@ class YouTubeAPI:
                 path = api_dl(video_id, mode="audio")
                 if path:
                     return path
-                print("APIs failed, falling back to cookies-based download")
+                logger.error("APIs failed, falling back to cookies-based download")
             except Exception as e:
-                print(f"API download failed: {e}")
+                logger.error(f"API download failed: {e}")
 
             # Fallback to cookies-based download
             ydl_optssx = {
@@ -412,7 +411,7 @@ class YouTubeAPI:
                 "no_warnings": True,
             }
             x = yt_dlp.YoutubeDL(ydl_optssx)
-            info = x.extract_info(link, False)
+            info = x.extract_info(link, download=False)
             xyz = os.path.join("downloads", f"{info['id']}.{info['ext']}")
             if os.path.exists(xyz):
                 return xyz
@@ -425,9 +424,9 @@ class YouTubeAPI:
                 path = api_dl(video_id, mode="video")
                 if path:
                     return path
-                print("API_URL1 failed, falling back to cookies-based download")
+                logger.error("API_URL1 failed, falling back to cookies-based download")
             except Exception as e:
-                print(f"API_URL1 video download failed: {e}")
+                logger.error(f"API_URL1 video download failed: {e}")
 
             # Fallback to cookies-based download
             ydl_optssx = {
@@ -440,7 +439,7 @@ class YouTubeAPI:
                 "no_warnings": True,
             }
             x = yt_dlp.YoutubeDL(ydl_optssx)
-            info = x.extract_info(link, False)
+            info = x.extract_info(link, download=False)
             xyz = os.path.join("downloads", f"{info['id']}.{info['ext']}")
             if os.path.exists(xyz):
                 return xyz
@@ -516,11 +515,11 @@ class YouTubeAPI:
                 else:
                     file_size = await check_file_size(link)
                     if not file_size:
-                        print("None file Size")
-                        return
+                        logger.error("None file Size")
+                        return None
                     total_size_mb = file_size / (1024 * 1024)
                     if total_size_mb > 250:
-                        print(f"File size {total_size_mb:.2f} MB exceeds the 100MB limit.")
+                        logger.error(f"File size {total_size_mb:.2f} MB exceeds the 100MB limit.")
                         return None
                     direct = True
                     downloaded_file = await loop.run_in_executor(None, video_dl)
