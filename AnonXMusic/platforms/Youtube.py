@@ -11,12 +11,18 @@ from pyrogram.types import Message
 from youtubesearchpython.__future__ import VideosSearch
 from AnonXMusic.utils.database import is_on_off
 from AnonXMusic.utils.formatters import time_to_seconds
-import aiohttp
 import logging
 from config import API_URL1, API_URL2
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with detailed format
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+    handlers=[
+        logging.FileHandler('youtube_api.log'),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 def extract_video_id(link: str) -> str:
@@ -36,7 +42,7 @@ def extract_video_id(link: str) -> str:
             return match.group(1)
     raise ValueError(f"Invalid YouTube or YouTube Music link: {link}")
 
-async def api_dl(video_id: str, mode: str = "audio") -> str:
+def api_dl(video_id: str, mode: str = "audio") -> str:
     """
     Downloads audio or video using API_URL1 (primary) or API_URL2 (fallback for audio).
     Returns the file path if successful, None otherwise.
@@ -51,68 +57,62 @@ async def api_dl(video_id: str, mode: str = "audio") -> str:
     youtube_url = f"https://www.youtube.com/watch?v={video_id}"
     os.makedirs("downloads", exist_ok=True)
     
-    async with aiohttp.ClientSession() as session:
-        # Try API_URL1
-        if API_URL1:
-            for attempt in range(1):
-                try:
-                    api_url1 = f"{API_URL1}?url={youtube_url}&downloadMode={mode}"
-                    logger.info(f"Attempt {attempt + 1}: API_URL1 for {video_id}")
-                    async with session.get(api_url1, timeout=10) as response:
-                        if response.status != 200:
-                            raise Exception(f"API_URL1 failed with status {response.status}")
-                        data = await response.json()
-                        if data.get("successful") != "success" or "url" not in data.get("data", {}):
-                            raise Exception(f"API_URL1 invalid response: {data.get('message', 'Unknown error')}")
-                        
-                        download_url = data["data"]["url"]
-                        filename = data["data"].get("filename", f"{video_id}.{file_ext}")
-                        safe_filename = re.sub(r'[^\w\s.-]', '', filename).replace(' ', '_')
-                        if not safe_filename.lower().endswith(f".{file_ext}"):
-                            safe_filename = f"{video_id}.{file_ext}"
-                        file_path = os.path.join("downloads", safe_filename)
-                        
-                        async with session.get(download_url, timeout=30) as dl_response:
-                            if dl_response.status != 200:
-                                raise Exception(f"Download failed with status {dl_response.status}")
-                            with open(file_path, 'wb') as f:
-                                while True:
-                                    chunk = await dl_response.content.read(8192)
-                                    if not chunk:
-                                        break
-                                    f.write(chunk)
-                            logger.info(f"Downloaded {file_path} via API_URL1")
-                            return file_path
-                except Exception as e:
-                    logger.error(f"API_URL1 attempt {attempt + 1} failed: {e}")
-                    if attempt < 2:
-                        await asyncio.sleep(1)
-                    continue
-            logger.warning(f"Max retries reached for API_URL1: {video_id}")
-
-        # Fallback to API_URL2 for audio
-        if mode == "audio" and API_URL2:
+    # Try API_URL1
+    if API_URL1:
+        for attempt in range(1):
             try:
-                api_url2 = f"{API_URL2}?direct&id={video_id}"
-                logger.info(f"Trying API_URL2: {api_url2}")
-                async with session.get(api_url2, timeout=10) as response:
-                    if response.status != 200:
-                        raise Exception(f"API_URL2 failed with status {response.status}")
-                    async with session.get(await response.text(), timeout=30) as dl_response:
-                        if dl_response.status != 200:
-                            raise Exception(f"Download failed with status {dl_response.status}")
-                        with open(file_path, 'wb') as f:
-                            while True:
-                                chunk = await dl_response.content.read(8192)
-                                if not chunk:
-                                    break
+                api_url1 = f"{API_URL1}?url={youtube_url}&downloadMode={mode}"
+                logger.info(f"Attempt {attempt + 1}: API_URL1 for {video_id}")
+                response = requests.get(api_url1, timeout=10)
+                if response.status_code != 200:
+                    raise Exception(f"API_URL1 failed with status {response.status_code}")
+                data = response.json()
+                if data.get("successful") != "success" or "url" not in data.get("data", {}):
+                    raise Exception(f"API_URL1 invalid response: {data.get('message', 'Unknown error')}")
+                
+                download_url = data["data"]["url"]
+                filename = data["data"].get("filename", f"{video_id}.{file_ext}")
+                # Sanitize filename
+                safe_filename = re.sub(r'[^\w\s.-]', '', filename).replace(' ', '_')
+                if not safe_filename.lower().endswith(f".{file_ext}"):
+                    safe_filename = f"{video_id}.{file_ext}"
+                file_path = os.path.join("downloads", safe_filename)
+                
+                with requests.get(download_url, stream=True, timeout=30) as dl_response:
+                    if dl_response.status_code != 200:
+                        raise Exception(f"Download failed with status {dl_response.status_code}")
+                    with open(file_path, 'wb') as f:
+                        for chunk in dl_response.iter_content(chunk_size=8192):
+                            if chunk:
                                 f.write(chunk)
-                        logger.info(f"Downloaded {file_path} via API_URL2")
-                        return file_path
+                    logger.info(f"Downloaded {file_path} via API_URL1")
+                    return file_path
             except Exception as e:
-                logger.error(f"API_URL2 failed: {e}")
-                if os.path.exists(file_path):
-                    os.remove(file_path)
+                logger.error(f"API_URL1 attempt {attempt + 1} failed: {e}")
+                if attempt < 2:
+                    continue
+            break
+        logger.warning(f"Max retries reached for API_URL1: {video_id}")
+
+    # Fallback to API_URL2 for audio
+    if mode == "audio" and API_URL2:
+        try:
+            api_url2 = f"{API_URL2}?direct&id={video_id}"
+            logger.info(f"Trying API_URL2: {api_url2}")
+            with requests.get(api_url2, stream=True, timeout=30) as response:
+                if response.status_code != 200:
+                    raise Exception(f"API_URL2 failed with status {response.status_code}")
+                # API_URL2 returns the MP3 file directly
+                with open(file_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                logger.info(f"Downloaded {file_path} via API_URL2")
+                return file_path
+        except Exception as e:
+            logger.error(f"API_URL2 failed: {e}")
+            if os.path.exists(file_path):
+                os.remove(file_path)
     
     logger.error(f"All API attempts failed for {video_id}")
     return None
@@ -177,12 +177,7 @@ async def check_file_size(link):
         logger.error("Failed to retrieve format info")
         return None
     
-    formats = info.get('formats', [])
-    if not formats:
-        logger.error("No formats found")
-        return None
-    
-    total_size = parse_size(formats)
+    formats = Talbot_size = parse_size(formats)
     if not total_size:
         logger.error("No valid file size found")
         return None
