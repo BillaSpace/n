@@ -5,6 +5,7 @@ from typing import Union
 
 from pyrogram import Client
 from pyrogram.types import InlineKeyboardMarkup
+from pyrogram.errors import FloodWait
 from pytgcalls import PyTgCalls, StreamType
 from pytgcalls.exceptions import (
     AlreadyJoinedError,
@@ -555,18 +556,41 @@ class Call(PyTgCalls):
             pings.append(await self.five.ping)
         return str(round(sum(pings) / len(pings), 3))
 
-    async def start(self):
-        LOGGER(__name__).info("Starting PyTgCalls Client...\n")
-        if config.STRING1:
-            await self.one.start()
-        if config.STRING2:
-            await self.two.start()
-        if config.STRING3:
-            await self.three.start()
-        if config.STRING4:
-            await self.four.start()
-        if config.STRING5:
-            await self.five.start()
+    
+
+ async def safe_start(client, name):
+     try:
+        await client.get_me()  # Check if already started
+        print(f"{name} already started.")
+        return
+    except:
+        pass  # Not started, continue below
+
+    while True:
+        try:
+            await client.start()
+            print(f"{name} started successfully.")
+            break
+        except FloodWait as e:
+            print(f"FloodWait while starting {name}: Waiting {e.value} seconds...")
+            await asyncio.sleep(e.value)
+        except Exception as e:
+            print(f"Unexpected error while Safe starting Pytgcalls & its clients {name}: {e}")
+            break
+
+async def start(self):
+    LOGGER(__name__).info("Starting PyTgCalls Clients For BillaMusic...\n")
+
+    if config.STRING1:
+        await safe_start(self.one, "Assistant 1")
+    if config.STRING2:
+        await safe_start(self.two, "Assistant 2")
+    if config.STRING3:
+        await safe_start(self.three, "Assistant 3")
+    if config.STRING4:
+        await safe_start(self.four, "Assistant 4")
+    if config.STRING5:
+        await safe_start(self.five, "Assistant 5")
 
     async def decorators(self):
         @self.one.on_kicked()
