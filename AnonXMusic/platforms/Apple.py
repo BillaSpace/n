@@ -1,6 +1,7 @@
 import re
 import json
 from typing import Union, List, Dict
+import unicodedata
 
 import requests
 from bs4 import BeautifulSoup
@@ -57,26 +58,46 @@ class AppleAPI:
             return None
 
         soup = BeautifulSoup(html, "html.parser")
-        title_tag = soup.find("title")
-        if not title_tag:
-            logger.error("No <title> tag found in HTML")
-            return None
 
-        # Clean up the title to remove unwanted text (e.g., "Apple Music" or special characters)
-        title_text = title_tag.text.replace("‎", "").replace(" – Apple Music", "").strip()
-        parts = title_text.split(" – ")
-        if len(parts) < 2:
-            logger.error(f"Invalid title format: {title_text}")
-            return None
+        # Try og:title meta tag first (like old Apple.py)
+        search = None
+        for tag in soup.find_all("meta"):
+            if tag.get("property", None) == "og:title":
+                search = tag.get("content", None)
+                break
 
-        # Construct query from song title and artist (first two parts)
-        query = " ".join(parts[:2]).strip()
-        logger.info(f"Searching YouTube for query: {query}")
+        # Fallback to <title> tag with improved parsing
+        if not search:
+            title_tag = soup.find("title")
+            if not title_tag:
+                logger.error("No <title> tag found in HTML")
+                return None
 
-        results = VideosSearch(query, limit=1)
+            # Normalize Unicode characters and clean title
+            title_text = unicodedata.normalize("NFKD", title_tag.text).replace("‎", "").replace(" – Apple Music", "").strip()
+            # Handle "Song by" format, e.g., "Rehle Mere Kol – Song by Simran Choudhary, Aditya Rikhari & Hiten – Apple Music"
+            if " – Song by " in title_text:
+                parts = title_text.split(" – Song by ")
+                if len(parts) < 2:
+                    logger.error(f"Invalid title format: {title_text}")
+                    return None
+                song = parts[0].strip()
+                artists = parts[1].split(" – ")[0].strip()  # Remove any trailing parts
+                search = f"{song} {artists}"
+            else:
+                # Fallback to splitting on " – "
+                parts = title_text.split(" – ")
+                if len(parts) < 2:
+                    logger.error(f"Invalid title format: {title_text}")
+                    return None
+                search = " ".join(parts[:2]).strip()
+
+        logger.info(f"Searching YouTube for query: {search}")
+
+        results = VideosSearch(search, limit=1)
         r = await results.next()  # Asynchronous call
         if not r["result"]:
-            logger.error(f"No YouTube results found for query: {query}")
+            logger.error(f"No YouTube results found for query: {search}")
             return None
 
         track_details = self.map_yt_result(r["result"][0])
