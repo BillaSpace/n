@@ -1,6 +1,7 @@
 import asyncio
+
 from pyrogram import filters
-from pyrogram.errors import FloodWait, MessageIdInvalid
+from pyrogram.errors import FloodWait
 from pyrogram.types import Message
 
 from AnonXMusic import app
@@ -41,10 +42,8 @@ async def global_ban(client, message: Message, _):
 
     BANNED_USERS.add(user.id)
 
-    served_chats = []
     chats = await get_served_chats()
-    for chat in chats:
-        served_chats.append(int(chat.get("chat_id", 0)))
+    served_chats = [int(chat) for chat in chats]
 
     time_expected = get_readable_time(len(served_chats))
     mystic = await message.reply_text(_["gban_5"].format(user.mention, time_expected))
@@ -53,22 +52,23 @@ async def global_ban(client, message: Message, _):
     for chat_id in served_chats:
         try:
             await app.ban_chat_member(chat_id, user.id)
+        except FloodWait as fw:
+            await asyncio.sleep(fw.value)
+        except Exception:
+            continue
+
+        try:
             async for msg in app.search_messages(chat_id, from_user=user.id):
                 try:
                     await app.delete_messages(chat_id, msg.id)
-                except FloodWait as e:
-                    await asyncio.sleep(e.value)
-                    try:
-                        await app.delete_messages(chat_id, msg.id)
-                    except (MessageIdInvalid, Exception):
-                        continue
-                except (MessageIdInvalid, Exception):
+                except FloodWait as fw:
+                    await asyncio.sleep(fw.value)
+                except Exception:
                     continue
-            number_of_chats += 1
-        except FloodWait as e:
-            await asyncio.sleep(e.value)
         except Exception:
-            continue
+            pass
+
+        number_of_chats += 1
 
     await add_banned_user(user.id)
 
@@ -102,10 +102,8 @@ async def global_unban(client, message: Message, _):
 
     BANNED_USERS.discard(user.id)
 
-    served_chats = []
     chats = await get_served_chats()
-    for chat in chats:
-        served_chats.append(int(chat.get("chat_id", 0)))
+    served_chats = [int(chat) for chat in chats]
 
     time_expected = get_readable_time(len(served_chats))
     mystic = await message.reply_text(_["gban_8"].format(user.mention, time_expected))
@@ -115,8 +113,8 @@ async def global_unban(client, message: Message, _):
         try:
             await app.unban_chat_member(chat_id, user.id)
             number_of_chats += 1
-        except FloodWait as e:
-            await asyncio.sleep(e.value)
+        except FloodWait as fw:
+            await asyncio.sleep(fw.value)
         except Exception:
             continue
 
@@ -149,20 +147,16 @@ async def gbanned_list(client, message: Message, _):
     await mystic.edit_text(msg)
 
 
+# 👇 Auto-delete messages sent by gbanned users in real time
 @app.on_message(filters.group, group=999)
 async def delete_gbanned_messages(_, message: Message):
     user = message.from_user
     if not user:
         return
-    if not await is_banned_user(user.id):
-        return
-    try:
-        await message.delete()
-    except FloodWait as e:
-        await asyncio.sleep(e.value)
+    if await is_banned_user(user.id):
         try:
             await message.delete()
-        except (MessageIdInvalid, Exception):
+        except FloodWait as fw:
+            await asyncio.sleep(fw.value)
+        except Exception:
             pass
-    except (MessageIdInvalid, Exception):
-        pass
