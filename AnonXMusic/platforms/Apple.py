@@ -3,19 +3,20 @@ import json
 from typing import Union, List, Dict
 import unicodedata
 import aiohttp
-import asyncio
+
 from bs4 import BeautifulSoup
 from youtubesearchpython.__future__ import VideosSearch
 import logging
 
+from config import APPLE_MUSIC_URL  # Fallback thumbnail
+
+# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
 class AppleAPI:
     def __init__(self):
-        # More lenient regex to avoid rejecting valid Apple Music links
-        self.regex = r"^https:\/\/(music|itunes)\.apple\.com\/.*$"
+        self.regex = r"^https:\/\/(music|itunes)\.apple\.com\/[a-z]{2}\/(album|playlist|artist|song)\/[a-zA-Z0-9\-._/?=&%]+(\?i=[0-9]+&ls)?$"
         self.base = "https://music.apple.com/in/playlist/"
 
     async def valid(self, link: str) -> bool:
@@ -24,15 +25,8 @@ class AppleAPI:
 
     async def fetch_html(self, url: str) -> Union[str, None]:
         logger.info(f"Fetching HTML for URL: {url}")
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/114.0.0.0 Safari/537.36"
-            )
-        }
         try:
-            async with aiohttp.ClientSession(headers=headers) as session:
+            async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:
                     if response.status != 200:
                         logger.error(f"Failed to fetch URL {url}: Status {response.status}")
@@ -44,12 +38,14 @@ class AppleAPI:
 
     def map_yt_result(self, v: dict) -> dict:
         try:
+            thumb_url = v.get("thumbnails", [{}])[0].get("url", "")
+            thumb_url = thumb_url.split("?")[0] if thumb_url else APPLE_MUSIC_URL
             return {
                 "title": v.get("title", ""),
                 "link": v.get("link", ""),
                 "vidid": v.get("id", ""),
                 "duration_min": v.get("duration", ""),
-                "thumb": v.get("thumbnails", [{}])[0].get("url", "").split("?")[0],
+                "thumb": thumb_url,
             }
         except Exception as e:
             logger.error(f"Error mapping YouTube result: {str(e)}")
@@ -66,16 +62,15 @@ class AppleAPI:
             return None
 
         soup = BeautifulSoup(html, "html.parser")
-
         search = None
+
         for tag in soup.find_all("meta"):
-            if tag.get("property", None) == "og:title":
-                search = tag.get("content", None)
+            if tag.get("property") == "og:title":
+                search = tag.get("content")
                 break
 
         if not search:
             title_tag = soup.find("title")
-            logger.info(f"[DEBUG] Fetched <title>: {title_tag.text if title_tag else 'None'}")
             if not title_tag:
                 logger.error("No <title> tag found in HTML")
                 return None
@@ -141,13 +136,10 @@ class AppleAPI:
                 if not re.match(r"^[0-9a-fA-F]{16,}$", hex_id):
                     logger.error(f"Invalid hexadecimal playlist ID: {hex_id}")
                     return None
-                logger.info(f"Extracted hexadecimal playlist ID: {playlist_id}")
             else:
                 if not re.match(r"^[a-zA-Z0-9\-._]{1,100}$", playlist_id):
                     logger.error(f"Invalid playlist name format: {playlist_id}")
                     return None
-                logger.info(f"Extracted playlist name: {playlist_id}")
-
         except Exception as e:
             logger.error(f"Error extracting playlist ID from URL {url}: {str(e)}")
             return None
