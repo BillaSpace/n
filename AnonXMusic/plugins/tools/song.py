@@ -1,13 +1,16 @@
 import os
 import asyncio
+
 import time
 import requests
 import yt_dlp
+
+from  import app
 from youtubesearchpython.__future__ import VideosSearch
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import SONG_DUMP_ID, API_URL2
+from config import API_URL2, LOGGER_ID as SONG_DUMP_ID
 
 DOWNLOADS_DIR = "downloads"
 COOKIES_PATH = "cookies/cookies.txt"
