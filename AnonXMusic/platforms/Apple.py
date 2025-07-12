@@ -8,26 +8,31 @@ from bs4 import BeautifulSoup
 from youtubesearchpython.__future__ import VideosSearch
 import logging
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class AppleAPI:
     def __init__(self):
-        # Updated regex to handle both Apple Music and iTunes URL formats
-        self.regex = r"^https:\/\/(music|itunes)\.apple\.com\/[a-z]{2}\/(album|playlist|artist|song)\/[a-zA-Z0-9\-._/?=&%]+(\?i=[0-9]+&ls)?$"
+        # More lenient regex to avoid rejecting valid Apple Music links
+        self.regex = r"^https:\/\/(music|itunes)\.apple\.com\/.*$"
         self.base = "https://music.apple.com/in/playlist/"
 
     async def valid(self, link: str) -> bool:
-        """Check if the URL is a valid Apple Music or iTunes URL."""
         logger.info(f"Validating URL: {link}")
         return bool(re.match(self.regex, link))
 
     async def fetch_html(self, url: str) -> Union[str, None]:
-        """Fetch HTML content from the given URL asynchronously."""
         logger.info(f"Fetching HTML for URL: {url}")
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/114.0.0.0 Safari/537.36"
+            )
+        }
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(headers=headers) as session:
                 async with session.get(url) as response:
                     if response.status != 200:
                         logger.error(f"Failed to fetch URL {url}: Status {response.status}")
@@ -38,7 +43,6 @@ class AppleAPI:
             return None
 
     def map_yt_result(self, v: dict) -> dict:
-        """Map YouTube search result to track details."""
         try:
             return {
                 "title": v.get("title", ""),
@@ -52,7 +56,6 @@ class AppleAPI:
             return {}
 
     async def track(self, url: str, playid: Union[bool, str] = None) -> Union[tuple[Dict, str], None]:
-        """Fetch details for an Apple Music or iTunes track asynchronously."""
         if playid:
             url = self.base + url
             logger.info(f"Constructed track URL: {url}")
@@ -64,21 +67,19 @@ class AppleAPI:
 
         soup = BeautifulSoup(html, "html.parser")
 
-        # Try og:title meta tag first
         search = None
         for tag in soup.find_all("meta"):
             if tag.get("property", None) == "og:title":
                 search = tag.get("content", None)
                 break
 
-        # Fallback to <title> tag with improved parsing
         if not search:
             title_tag = soup.find("title")
+            logger.info(f"[DEBUG] Fetched <title>: {title_tag.text if title_tag else 'None'}")
             if not title_tag:
                 logger.error("No <title> tag found in HTML")
                 return None
 
-            # Normalize Unicode characters and clean title
             title_text = unicodedata.normalize("NFKD", title_tag.text).replace("‎", "").replace(" – Apple Music", "").strip()
             if " – Song by " in title_text:
                 parts = title_text.split(" – Song by ")
@@ -95,13 +96,12 @@ class AppleAPI:
                     return None
                 search = " ".join(parts[:2]).strip()
 
-        # Clean up search query
         search = search.replace(" on Apple Music", "").strip()
         logger.info(f"Searching YouTube for query: {search}")
 
         try:
             results = VideosSearch(search, limit=1)
-            r = await asyncio.wait_for(results.next(), timeout=30.0)  # 30-second timeout
+            r = await asyncio.wait_for(results.next(), timeout=30.0)
             if not r.get("result"):
                 logger.error(f"No YouTube results found for query: {search}")
                 return None
@@ -120,7 +120,6 @@ class AppleAPI:
             return None
 
     async def playlist(self, url: str, playid: Union[bool, str] = None) -> Union[tuple[List[Dict], str], None]:
-        """Fetch details for an Apple Music or iTunes playlist asynchronously."""
         if playid:
             url = self.base + url
             logger.info(f"Constructed playlist URL: {url}")
@@ -130,25 +129,21 @@ class AppleAPI:
             logger.error(f"No HTML content retrieved for playlist URL: {url}")
             return None
 
-        # Improved playlist ID extraction with regex
         try:
-            # Match playlist ID (hex or name) after 'playlist/'
             playlist_id_match = re.search(r"playlist/([a-zA-Z0-9\-._]+?)(?:[/?#]|$)", url)
             if not playlist_id_match:
                 logger.error(f"Invalid playlist URL format: {url}")
                 return None
             playlist_id = playlist_id_match.group(1)
 
-            # Validate if it's a hex playlist ID (e.g., pl.<hex>)
             if playlist_id.startswith("pl."):
-                hex_id = playlist_id[3:]  # Remove 'pl.' prefix
-                if not re.match(r"^[0-9a-fA-F]{16,}$", hex_id):  # Require at least 16 chars for hex
+                hex_id = playlist_id[3:]
+                if not re.match(r"^[0-9a-fA-F]{16,}$", hex_id):
                     logger.error(f"Invalid hexadecimal playlist ID: {hex_id}")
                     return None
                 logger.info(f"Extracted hexadecimal playlist ID: {playlist_id}")
             else:
-                # Validate non-hex playlist name
-                if not re.match(r"^[a-zA-Z0-9\-._]{1,100}$", playlist_id):  # Limit length for safety
+                if not re.match(r"^[a-zA-Z0-9\-._]{1,100}$", playlist_id):
                     logger.error(f"Invalid playlist name format: {playlist_id}")
                     return None
                 logger.info(f"Extracted playlist name: {playlist_id}")
@@ -160,7 +155,6 @@ class AppleAPI:
         soup = BeautifulSoup(html, "html.parser")
         queries = []
 
-        # Try JSON-LD first
         for script in soup.find_all("script", {"type": "application/ld+json"}):
             try:
                 data = json.loads(script.string)
@@ -174,7 +168,6 @@ class AppleAPI:
                 logger.warning(f"Error parsing JSON-LD: {str(e)}")
                 continue
 
-        # Fallback to scraping track list from HTML if JSON-LD yields no results
         if not queries:
             logger.info("No tracks found in JSON-LD, attempting HTML scraping")
             track_elements = soup.find_all("div", class_="songs-list-row")
