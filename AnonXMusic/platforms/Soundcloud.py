@@ -1,7 +1,12 @@
-import asyncio
+import re
 from os import path
 from yt_dlp import YoutubeDL
 from AnonXMusic.utils.formatters import seconds_to_min
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class SoundAPI:
     def __init__(self):
@@ -13,26 +18,31 @@ class SoundAPI:
             "continuedl": True,
             "quiet": True,
         }
-        self.semaphore = asyncio.Semaphore(3)  # Limit to 3 concurrent downloads
+        # Updated regex to handle both soundcloud.com and on.soundcloud.com URLs
+        self.regex = r"^https?://((www\.)?soundcloud\.com|on\.soundcloud\.com)/[a-zA-Z0-9\-._/?=&%]+"
 
-    async def valid(self, link: str):
-        return "soundcloud.com" in link
+    def valid(self, link: str) -> bool:
+        """Check if the URL is a valid SoundCloud URL."""
+        logger.info(f"Validating SoundCloud URL: {link}")
+        return bool(re.match(self.regex, link))
 
-    async def download(self, url):
-        async with self.semaphore:
-            d = YoutubeDL(self.opts)
-            try:
-                # Run yt_dlp in a thread to prevent blocking
-                info = await asyncio.to_thread(d.extract_info, url, download=True)
-            except Exception:
-                return False
-            xyz = path.join("downloads", f"{info['id']}.{info['ext']}")
-            duration_min = seconds_to_min(info["duration"])
-            track_details = {
-                "title": info["title"],
-                "duration_sec": info["duration"],
-                "duration_min": duration_min,
-                "uploader": info["uploader"],
-                "filepath": xyz,
-            }
+    def download(self, url: str) -> tuple[dict, str] | bool:
+        """Download audio from a SoundCloud URL and return track details."""
+        logger.info(f"Downloading from URL: {url}")
+        d = YoutubeDL(self.opts)
+        try:
+            info = d.extract_info(url, download=True)
+        except Exception as e:
+            logger.error(f"Failed to download from {url}: {str(e)}")
+            return False
+        xyz = path.join("downloads", f"{info['id']}.{info['ext']}")
+        duration_min = seconds_to_min(info["duration"])
+        track_details = {
+            "title": info["title"],
+            "duration_sec": info["duration"],
+            "duration_min": duration_min,
+            "uploader": info["uploader"],
+            "filepath": xyz,
+        }
+        return track_details, xyz           }
             return track_details, xyz
