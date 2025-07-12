@@ -15,13 +15,15 @@ from config import BANNED_USERS
 
 async def init():
     if (
-        not config.STRING1
-        and not config.STRING2
-        and not config.STRING3
-        and not config.STRING4
-        and not config.STRING5
+        not config.STRING1 and
+        not config.STRING2 and
+        not config.STRING3 and
+        not config.STRING4 and
+        not config.STRING5
     ):
-        LOGGER(__name__).error("Assistant String Sessions or client variables are not defined, exiting...")
+        LOGGER(__name__).error(
+            "Assistant String Sessions or client variables are not defined, exiting..."
+        )
         exit()
 
     await sudo()
@@ -65,14 +67,15 @@ async def init():
     await Anony.decorators()
 
     LOGGER("AnonXMusic").info(
-        "✅ AnonX Music Bot Started Successfully.\nVisit @FallenAssociation"
+        "✅ Billa Music Bot Started Successfully.\nVisit @BillaSpace"
     )
 
     await idle()
+
     await app.stop()
     await userbot.stop()
 
-    LOGGER("AnonXMusic").info("👋 Stopping AnonX Music Bot...")
+    LOGGER("AnonXMusic").info("👋 Stopping Billa music Music Bot...")
 
 
 if __name__ == "__main__":
