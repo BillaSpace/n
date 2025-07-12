@@ -1,15 +1,13 @@
 import os
-import asyncio
-
 import time
+import asyncio
 import requests
 import yt_dlp
 
 from AnonXMusic import app
-from youtubesearchpython.__future__ import VideosSearch
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-
+from youtubesearchpython.__future__ import VideosSearch
 from config import API_URL2, LOGGER_ID as SONG_DUMP_ID
 
 DOWNLOADS_DIR = "downloads"
@@ -20,6 +18,12 @@ if not os.path.exists(DOWNLOADS_DIR):
     os.makedirs(DOWNLOADS_DIR)
 if not os.path.exists("cookies"):
     os.makedirs("cookies")
+
+# Custom logger to suppress yt-dlp spam
+class QuietLogger:
+    def debug(self, msg): pass
+    def warning(self, msg): pass
+    def error(self, msg): print(f"[yt-dlp error] {msg}")
 
 def parse_duration(duration_str):
     try:
@@ -63,19 +67,13 @@ async def download_audio(url, video_id, title):
         "outtmpl": output,
         "noplaylist": True,
         "quiet": True,
+        "logger": QuietLogger(),
         "cookiefile": COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
         "no_warnings": True,
         "ignoreerrors": True,
-        "geo_bypass": True,  # Bypass geo-restrictions
-        "nocheckcertificate": True,  # Handle SSL issues
-        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "extractor_args": {
-            "youtube": {
-                "skip_auth_checks": True,  # Skip age restriction checks
-                "lang": "en",  # Set language to English
-            }
-        },
-        "force_generic_extractor": False,
+        "geo_bypass": True,
+        "nocheckcertificate": True,
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     }
 
     for attempt in range(MAX_RETRIES):
@@ -84,11 +82,9 @@ async def download_audio(url, video_id, title):
                 ydl.download([url])
             if os.path.exists(output):
                 return output
-        except yt_dlp.utils.DownloadError as e:
+        except Exception as e:
             print(f"[yt-dlp] Attempt {attempt + 1} failed: {e}")
-            if attempt == MAX_RETRIES - 1:
-                return None
-            await asyncio.sleep(2)  # Wait before retrying
+            await asyncio.sleep(2)
     return None
 
 @app.on_message(filters.command(["song", "music"]) & filters.text)
@@ -115,7 +111,7 @@ async def song_handler(client: Client, message: Message):
     video_id = result.get("id")
     if not video_id:
         return await m.edit("<b>Invalid video found. Try another query.</b>")
-    
+
     link = f"https://www.youtube.com/watch?v={video_id}"
     title = result.get("title", "Unknown")[:60]
     thumbnail = result.get("thumbnails", [{}])[0].get("url")
@@ -128,6 +124,7 @@ async def song_handler(client: Client, message: Message):
     await m.edit("📥 Downloading Lossless Song File...")
     audio_file = await download_audio(link, video_id, title)
 
+    # Fallback to API URL if yt-dlp fails
     if not audio_file and API_URL2 and video_id:
         api_url = f"{API_URL2}?direct&id={video_id}"
         try:
@@ -141,8 +138,7 @@ async def song_handler(client: Client, message: Message):
             print(f"[API] Download failed: {e}")
 
     if not audio_file:
-        await m.edit("<b>Failed to download song. It may be restricted or unavailable. Try a different one.</b>")
-        return
+        return await m.edit("<b>Failed to download song. It may be restricted or unavailable. Try a different one.</b>")
 
     dur = parse_duration(duration)
     caption = f"📻 <b><a href=\"{link}\">{title}</a></b>\n🕒 Duration: {duration}\n🎙️ By: {channel_name}"
@@ -162,8 +158,7 @@ async def song_handler(client: Client, message: Message):
         )
     except Exception as e:
         print(f"[Upload] Error: {e}")
-        await m.edit("<b>Failed to upload the song. Please try again.</b>")
-        return
+        return await m.edit("<b>Failed to upload the song. Please try again.</b>")
 
     await m.delete()
     asyncio.create_task(cleanup_files(audio_file, thumb_path, message, reply_msg))
